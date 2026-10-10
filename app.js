@@ -38,14 +38,12 @@
   function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
   function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 
-  // ---- team passcode (gates all Supabase access via x-team-pass header) ----
+  // ---- team passcodes (two roles; gate via x-team-pass header + Supabase RLS) ----
+  // Player code = view + update position. Coach code = add/delete/import/manage.
+  // NEITHER code is hardcoded with coach power in the public JS: the coach types the
+  // coach code once in the coach view and it's stored in this browser only.
   const PASS_KEY = "vbcoach.teampass";
-  // Coach view ships with the passcode baked in (coach already has full access intent).
-  // Player view prompts for it once and stores it in the browser.
-  const COACH_PASS = "win2027cup";
-  function getPass() {
-    try { return localStorage.getItem(PASS_KEY) || ""; } catch (e) { return ""; }
-  }
+  function getPass() { try { return localStorage.getItem(PASS_KEY) || ""; } catch (e) { return ""; } }
   function setPass(v) { try { localStorage.setItem(PASS_KEY, v); } catch (e) {} }
 
   // ---- Supabase client ----
@@ -56,17 +54,15 @@
       if (cfg && cfg.url && cfg.anonKey &&
           cfg.url.indexOf("YOUR_") < 0 && cfg.anonKey.indexOf("YOUR_") < 0 &&
           window.supabase && window.supabase.createClient) {
-        // pass the team passcode on every request via a custom header
-        const pass = /[?&]player\b/.test(location.search) ? getPass() : COACH_PASS;
         sb = window.supabase.createClient(cfg.url, cfg.anonKey, {
-          global: { headers: { "x-team-pass": pass } }
+          global: { headers: { "x-team-pass": getPass() } }
         });
         cloud = true;
       }
     } catch (e) { cloud = false; }
   })();
 
-  // Rebuild the client with a (new) passcode — used after a player enters the code.
+  // Rebuild the client with a given passcode (after coach/player enters it).
   function rebuildClientWithPass(pass) {
     const cfg = window.VB_SUPABASE;
     sb = window.supabase.createClient(cfg.url, cfg.anonKey, {
@@ -198,22 +194,61 @@
 
   async function bootstrapCoach() {
     const footer = document.getElementById("coachFooter");
-    if (cloud) {
-      setStatus("connecting…");
-      await reloadPlayers();
-      // show share row
-      const sr = document.getElementById("shareRow"); if (sr) sr.style.display = "";
-      // offer migration if cloud empty but local has players
-      const local = loadLocalPlayers();
-      if (players.length === 0 && local.length > 0) {
-        const mb = document.getElementById("migrateBox");
-        document.getElementById("migrateCount").textContent = local.length;
-        if (mb) mb.style.display = "";
-      }
-    } else {
+    if (!cloud) {
       setStatus("local mode (no cloud configured)");
-      if (footer) footer.textContent = "Local mode — roster saved only on this device. Add Supabase keys to enable sharing.";
+      if (footer) footer.textContent = "Local mode — roster saved only on this device.";
       players = loadLocalPlayers();
+      renderRoster();
+      return;
+    }
+    // Coach must enter the coach code once (stored in this browser). Nothing is baked into the public JS.
+    if (!getPass()) { showCoachPassPrompt(); return; }
+    await coachLoad();
+  }
+
+  function showCoachPassPrompt(wrong) {
+    setStatus("locked");
+    const list = document.getElementById("playerList");
+    document.getElementById("rosterEmpty").style.display = "none";
+    const sr = document.getElementById("shareRow"); if (sr) sr.style.display = "none";
+    list.innerHTML =
+      '<div class="pcard" style="max-width:380px">' +
+      '<div class="lbl" style="margin-bottom:8px">Enter the COACH passcode</div>' +
+      (wrong ? '<div class="saveflash" style="color:var(--bad)">Incorrect coach passcode — try again.</div>' : '') +
+      '<div class="row"><input id="coachPassInput" type="password" placeholder="coach passcode" ' +
+      'style="flex:1;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-size:15px"> ' +
+      '<button id="coachPassGo" class="primary small">Unlock</button></div>' +
+      '<div class="muted small" style="margin-top:6px">Coach-only. Players use the separate self-select link.</div>' +
+      '</div>';
+    const go = async function () {
+      const v = document.getElementById("coachPassInput").value.trim();
+      if (!v) return;
+      rebuildClientWithPass(v);
+      // Verify it's the COACH code by probing an insert (coach-only) then deleting the probe.
+      try {
+        const { data, error } = await sb.from("players")
+          .insert({ name: "__coachcheck__", sort_order: -9999 }).select().single();
+        if (error) throw error;                 // player code or wrong -> insert rejected
+        await sb.from("players").delete().eq("id", data.id);
+        setPass(v);
+        await coachLoad();
+      } catch (e) {
+        showCoachPassPrompt(true);
+      }
+    };
+    document.getElementById("coachPassGo").addEventListener("click", go);
+    document.getElementById("coachPassInput").addEventListener("keydown", function (e) { if (e.key === "Enter") go(); });
+  }
+
+  async function coachLoad() {
+    setStatus("connecting…");
+    await reloadPlayers();
+    const sr = document.getElementById("shareRow"); if (sr) sr.style.display = "";
+    const local = loadLocalPlayers();
+    if (players.length === 0 && local.length > 0) {
+      const mb = document.getElementById("migrateBox");
+      document.getElementById("migrateCount").textContent = local.length;
+      if (mb) mb.style.display = "";
     }
     renderRoster();
   }
@@ -243,8 +278,8 @@
     const url = location.origin + location.pathname + "?player";
     const msg = document.getElementById("shareMsg");
     navigator.clipboard.writeText(url).then(
-      () => { msg.textContent = "Copied! Share this with players: " + url; },
-      () => { msg.textContent = url; }
+      () => { msg.textContent = "Copied! Send players this link + the PLAYER code (win2027cup) — not your coach code."; },
+      () => { msg.textContent = url + "  (player code: win2027cup)"; }
     );
   }
 
@@ -655,19 +690,32 @@
       sel.addEventListener("change", async function () {
         const prev = p.position;
         p.position = sel.value;
-        const note = document.createElement("span");
+        highlightCourt(p.position);
         try {
           await cloudUpdate(p.id, { position: p.position });
           flashSaved(card, "Saved ✓");
         } catch (e) {
           p.position = prev; sel.value = prev;
+          highlightCourt(prev);
           flashSaved(card, "Save failed — try again", true);
         }
       });
+      // light the court when this player's row is focused/opened
+      sel.addEventListener("focus", function () { highlightCourt(p.position); });
 
       top.appendChild(jersey); top.appendChild(nm); top.appendChild(sel);
       card.appendChild(top);
       list.appendChild(card);
+    });
+  }
+
+  function highlightCourt(positionKey) {
+    const court = document.getElementById("court");
+    if (!court) return;
+    // Opposite shares Zone 2 with Setter (the court box is labeled "Setter / Opposite").
+    const target = positionKey === "Opposite / Right Side" ? "Setter" : positionKey;
+    court.querySelectorAll(".zone").forEach(function (z) {
+      z.classList.toggle("lit", z.getAttribute("data-pos") === target && !!target);
     });
   }
 
