@@ -34,6 +34,19 @@
       <button type="submit" class="primary">Add player</button>
     </form>
 
+    <details id="importBox" class="importbox">
+      <summary>📋 Import roster (paste a list)</summary>
+      <p class="hint">One player per line: <code>Name, Number, Position</code> (or tab/space separated). Position can be a role name like "Setter" or include the court spot — it's matched loosely. Lines that don't match are reported, not lost.</p>
+      <textarea id="importText" rows="6" placeholder="Amitbhai, 1, Middle Blocker
+Niravbhai, 7, Setter
+Mananbhai, 6, Libero"></textarea>
+      <div class="row">
+        <label class="muted"><input type="checkbox" id="importReplace"> Replace current roster (otherwise append)</label>
+        <button id="importBtn" class="primary small">Import</button>
+      </div>
+      <p id="importResult" class="muted small"></p>
+    </details>
+
     <div id="playerList" class="players"></div>
     <p id="rosterEmpty" class="empty">No players yet — add your first above.</p>
     <p class="count"><span id="playerCount">0</span> players</p>

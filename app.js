@@ -4,15 +4,23 @@
 
   const STORE_KEY = "vbcoach.v1";
 
-  // Standard volleyball positions
-  const POSITIONS = [
-    "Setter",
-    "Outside Hitter",
-    "Opposite / Right Side",
-    "Middle Blocker",
-    "Libero",
-    "Defensive Specialist",
+  // Standard volleyball positions. `key` = stored value (stable, don't change);
+  // `label` = friendly display (role + court spot); `zone` = official FIVB zone (service=1);
+  // `order` = court-reading order for the overview: front row L→R (4,3,2) then back row (5,6,1).
+  const POSITION_DEFS = [
+    { key: "Outside Hitter",         label: "Outside Hitter (front-left · Zone 4)",            zone: 4, order: 1 },
+    { key: "Middle Blocker",         label: "Middle Blocker (front-center · Zone 3)",          zone: 3, order: 2 },
+    { key: "Setter",                 label: "Setter (front-right · Zone 2)",                   zone: 2, order: 3 },
+    { key: "Opposite / Right Side",  label: "Opposite / Right Side (front-right · Zone 2)",    zone: 2, order: 4 },
+    { key: "Defensive Specialist – Left",  label: "Defensive Specialist – Left (back-left · Zone 5)",  zone: 5, order: 5 },
+    { key: "Libero",                 label: "Libero (back-center · Zone 6)",                   zone: 6, order: 6 },
+    { key: "Defensive Specialist – Right", label: "Defensive Specialist – Right (back-right · Zone 1)", zone: 1, order: 7 },
   ];
+  // Keep POSITIONS (keys) for existing data/drill-library compatibility, in court-reading order.
+  const POSITIONS = POSITION_DEFS.map(p => p.key);
+  const POS_LABEL = {}; const POS_ORDER = {};
+  POSITION_DEFS.forEach(p => { POS_LABEL[p.key] = p.label; POS_ORDER[p.key] = p.order; });
+  function posLabel(key) { return POS_LABEL[key] || key; }
 
   // Default drill library, mapped by position. Coach can edit freely.
   const DEFAULT_DRILLS = {
@@ -21,7 +29,8 @@
     "Opposite / Right Side": ["Right-side approach timing", "Back-row attack (pipe/D)", "Blocking the OH", "Slide attack", "Transition footwork"],
     "Middle Blocker": ["Blocking footwork (swing block)", "Quick-attack (tempo 1)", "Read-blocking the setter", "Lateral shuffle + close", "Slide timing"],
     "Libero": ["Platform passing reps", "Digging hard-driven balls", "Pepper (control)", "Serve-receive movement", "Emergency / pursuit"],
-    "Defensive Specialist": ["Serve-receive passing", "Reading the hitter", "Low-posture digging", "Court coverage movement", "Short-serve recovery"],
+    "Defensive Specialist – Left": ["Serve-receive passing (Zone 5)", "Reading the hitter", "Low-posture digging", "Court coverage (left back)", "Short-serve recovery"],
+    "Defensive Specialist – Right": ["Serve-receive passing (Zone 1)", "Reading the hitter", "Low-posture digging", "Court coverage (right back)", "Serve from Zone 1"],
   };
 
   // ---- state ----
@@ -51,6 +60,84 @@
       if (t.dataset.tab === "drills") renderDrills();
     });
   });
+
+  // ---- import roster (paste) ----
+  // Loosely match a free-text position to a POSITION key.
+  function matchPosition(raw) {
+    if (!raw) return "";
+    const s = raw.toLowerCase();
+    const has = (...w) => w.every(x => s.indexOf(x) >= 0);
+    // Read left/right/zone signals from the FULL string (incl. any parenthetical) FIRST.
+    const leftSig  = has("left")  || s.indexOf("zone 5") >= 0 || s.indexOf("back-left") >= 0;
+    const rightSig = has("right") && !has("right side"); // "right side" = Opposite, not DS-right
+    const zone1    = s.indexOf("zone 1") >= 0 || s.indexOf("back-right") >= 0;
+    if (has("defensive") || /\bds\b/.test(s)) {
+      if (leftSig) return "Defensive Specialist – Left";
+      if (rightSig || zone1) return "Defensive Specialist – Right";
+      return "Defensive Specialist – Left"; // bare DS -> left by default
+    }
+    if (has("libero")) return "Libero";
+    if (has("setter")) return "Setter";
+    if (has("opposite") || has("right side")) return "Opposite / Right Side";
+    if (has("middle") || has("blocker")) return "Middle Blocker";
+    if (has("outside") || has("hitter")) return "Outside Hitter";
+    return ""; // unmatched
+  }
+
+  document.getElementById("importBtn").addEventListener("click", function () {
+    const text = document.getElementById("importText").value;
+    const replace = document.getElementById("importReplace").checked;
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    if (!lines.length) { setImportResult("Nothing to import — paste some rows first.", true); return; }
+
+    const parsed = []; const skipped = [];
+    lines.forEach(function (line, i) {
+      // Skip a header row like "Name Number Position" (no number token + contains header words).
+      if (/^(name|player)\b/i.test(line) && !/\d/.test(line)) {
+        skipped.push("Line " + (i + 1) + ": looks like a header — skipped");
+        return;
+      }
+      // Normalize separators: commas/tabs/multi-space → single space, then split on spaces.
+      const tokens = line.replace(/\s*,\s*/g, " ").replace(/\t+/g, " ").trim().split(/\s+/);
+      // The number = first standalone 1–2 digit token. Name = tokens before it; position = tokens after.
+      const numIdx = tokens.findIndex(t => /^\d{1,2}$/.test(t));
+      let name = "", num = "", posRaw = "";
+      if (numIdx > 0) {
+        name = tokens.slice(0, numIdx).join(" ");
+        num = tokens[numIdx];
+        posRaw = tokens.slice(numIdx + 1).join(" ");
+      } else if (numIdx === 0) {
+        // number first (unusual): num, then rest is "name position" — ambiguous; treat first word as name
+        num = tokens[0]; name = tokens[1] || ""; posRaw = tokens.slice(2).join(" ");
+      } else {
+        // no number: first token name, rest position
+        name = tokens[0]; posRaw = tokens.slice(1).join(" ");
+      }
+      const position = matchPosition(posRaw);
+      if (!name) { skipped.push("Line " + (i + 1) + ": no name"); return; }
+      if (posRaw && !position) { skipped.push("Line " + (i + 1) + ' (' + name + '): position "' + posRaw + '" not recognized — added with no position'); }
+      parsed.push({ id: uid(), name: name, num: num, position: position, drills: [] });
+    });
+
+    if (!parsed.length) { setImportResult("No valid players found. " + skipped.join("; "), true); return; }
+
+    if (replace) state.players = parsed;
+    else state.players = state.players.concat(parsed);
+    save();
+    renderRoster();
+
+    let msg = "Imported " + parsed.length + " player" + (parsed.length === 1 ? "" : "s") +
+      (replace ? " (replaced roster)." : " (appended).");
+    if (skipped.length) msg += " ⚠ " + skipped.length + " note(s): " + skipped.join("; ");
+    setImportResult(msg, skipped.length > 0);
+    document.getElementById("importText").value = "";
+  });
+
+  function setImportResult(msg, warn) {
+    const el = document.getElementById("importResult");
+    el.textContent = msg;
+    el.style.color = warn ? "var(--warn)" : "var(--good)";
+  }
 
   // ---- roster ----
   const addForm = document.getElementById("addPlayerForm");
@@ -95,7 +182,7 @@
       sel.appendChild(blank);
       POSITIONS.forEach(function (pos) {
         const o = document.createElement("option");
-        o.value = pos; o.textContent = pos;
+        o.value = pos; o.textContent = posLabel(pos);
         if (p.position === pos) o.selected = true;
         sel.appendChild(o);
       });
@@ -136,7 +223,7 @@
     wrap.innerHTML = "";
     const lbl = document.createElement("div");
     lbl.className = "lbl";
-    lbl.textContent = p.position ? ("Assign drills · " + p.position) : "Pick a position to see drills";
+    lbl.textContent = p.position ? ("Assign drills · " + posLabel(p.position)) : "Pick a position to see drills";
     wrap.appendChild(lbl);
 
     if (!p.position) return;
@@ -172,7 +259,7 @@
       const box = document.createElement("div");
       box.className = "poslib";
       const h = document.createElement("h3");
-      h.textContent = pos;
+      h.textContent = posLabel(pos);
       box.appendChild(h);
 
       (state.drills[pos] || []).forEach(function (d, idx) {
@@ -245,7 +332,7 @@
     sel.innerHTML = '<option value="">All positions</option>';
     POSITIONS.forEach(function (pos) {
       const o = document.createElement("option");
-      o.value = pos; o.textContent = pos;
+      o.value = pos; o.textContent = posLabel(pos);
       sel.appendChild(o);
     });
     sel.value = cur;
@@ -256,14 +343,21 @@
     const root = document.getElementById("overviewTable");
     const filter = document.getElementById("filterPos").value;
     const rows = state.players.filter(p => !filter || p.position === filter);
+    // sort by court-reading order (front L→R then back); unassigned (no position) last
+    rows.sort(function (a, b) {
+      const oa = POS_ORDER[a.position] || 99;
+      const ob = POS_ORDER[b.position] || 99;
+      if (oa !== ob) return oa - ob;
+      return a.name.localeCompare(b.name);
+    });
     if (!rows.length) {
       root.innerHTML = '<p class="empty">No players to show.</p>';
       return;
     }
-    let html = "<table><thead><tr><th>#</th><th>Player</th><th>Position</th><th>Assigned drills</th></tr></thead><tbody>";
+    let html = "<table><thead><tr><th>#</th><th>Player</th><th>Position (court spot)</th><th>Assigned drills</th></tr></thead><tbody>";
     rows.forEach(function (p) {
       const pos = p.position
-        ? '<span class="posbadge">' + esc(p.position) + "</span>"
+        ? '<span class="posbadge">' + esc(posLabel(p.position)) + "</span>"
         : '<span class="posbadge none">—</span>';
       const drills = p.drills.length ? p.drills.map(esc).join("<br>") : '<span class="muted">none</span>';
       html += "<tr><td>" + (p.num ? "#" + esc(p.num) : "") + "</td><td>" + esc(p.name) +
@@ -281,7 +375,7 @@
   document.getElementById("exportBtn").addEventListener("click", function () {
     const lines = ["Volley Squad — Team Export", "Generated " + new Date().toLocaleString(), ""];
     state.players.forEach(function (p) {
-      lines.push((p.num ? "#" + p.num + " " : "") + p.name + " — " + (p.position || "no position"));
+      lines.push((p.num ? "#" + p.num + " " : "") + p.name + " — " + (p.position ? posLabel(p.position) : "no position"));
       if (p.drills.length) p.drills.forEach(d => lines.push("   • " + d));
       lines.push("");
     });
