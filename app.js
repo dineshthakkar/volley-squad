@@ -339,22 +339,47 @@
   }
   document.getElementById("filterPos").addEventListener("change", renderOverview);
 
+  // Team Overview sort state: key = 'position' | 'num' | 'name'; dir = 1 (asc) / -1 (desc)
+  let overviewSort = { key: "position", dir: 1 };
+
   function renderOverview() {
     const root = document.getElementById("overviewTable");
     const filter = document.getElementById("filterPos").value;
     const rows = state.players.filter(p => !filter || p.position === filter);
-    // sort by court-reading order (front L→R then back); unassigned (no position) last
+
+    const k = overviewSort.key, dir = overviewSort.dir;
     rows.sort(function (a, b) {
-      const oa = POS_ORDER[a.position] || 99;
-      const ob = POS_ORDER[b.position] || 99;
-      if (oa !== ob) return oa - ob;
-      return a.name.localeCompare(b.name);
+      let cmp = 0;
+      if (k === "num") {
+        // numeric sort; players with no number go last (regardless of dir)
+        const na = a.num === "" || a.num == null ? Infinity : parseInt(a.num, 10);
+        const nb = b.num === "" || b.num == null ? Infinity : parseInt(b.num, 10);
+        if (na === Infinity && nb === Infinity) cmp = 0;
+        else if (na === Infinity) return 1;
+        else if (nb === Infinity) return -1;
+        else cmp = na - nb;
+      } else if (k === "name") {
+        cmp = a.name.localeCompare(b.name);
+      } else { // position — court-reading order; unassigned last
+        const oa = POS_ORDER[a.position] || 99;
+        const ob = POS_ORDER[b.position] || 99;
+        cmp = oa - ob;
+        if (cmp === 0) cmp = a.name.localeCompare(b.name); // tiebreak by name
+      }
+      return cmp * dir;
     });
+
     if (!rows.length) {
       root.innerHTML = '<p class="empty">No players to show.</p>';
       return;
     }
-    let html = "<table><thead><tr><th>#</th><th>Player</th><th>Position (court spot)</th><th>Assigned drills</th></tr></thead><tbody>";
+
+    const arrow = key => overviewSort.key === key ? (overviewSort.dir === 1 ? " ▲" : " ▼") : "";
+    let html = '<table><thead><tr>' +
+      '<th class="sortable" data-sort="num">#' + arrow("num") + '</th>' +
+      '<th class="sortable" data-sort="name">Player' + arrow("name") + '</th>' +
+      '<th class="sortable" data-sort="position">Position (court spot)' + arrow("position") + '</th>' +
+      '<th>Assigned drills</th></tr></thead><tbody>';
     rows.forEach(function (p) {
       const pos = p.position
         ? '<span class="posbadge">' + esc(posLabel(p.position)) + "</span>"
@@ -365,6 +390,16 @@
     });
     html += "</tbody></table>";
     root.innerHTML = html;
+
+    // wire up clickable headers
+    root.querySelectorAll("th.sortable").forEach(function (th) {
+      th.addEventListener("click", function () {
+        const key = th.getAttribute("data-sort");
+        if (overviewSort.key === key) overviewSort.dir *= -1;   // same column → toggle direction
+        else overviewSort = { key: key, dir: 1 };               // new column → ascending
+        renderOverview();
+      });
+    });
   }
 
   function esc(s) {

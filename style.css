@@ -60,6 +60,8 @@ button{font-family:inherit}
 table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:14px}
 th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);vertical-align:top}
 th{background:#eef3fe;font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:#334}
+th.sortable{cursor:pointer;user-select:none;white-space:nowrap}
+th.sortable:hover{background:#dde8fd;color:var(--blue-dark)}
 tr:last-child td{border-bottom:none}
 .posbadge{display:inline-block;background:var(--chip);color:var(--blue-dark);border-radius:6px;padding:2px 8px;font-size:12px;font-weight:600}
 .posbadge.none{background:#f1f1f1;color:var(--muted)}
