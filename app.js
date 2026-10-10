@@ -619,15 +619,19 @@
       const v = document.getElementById("passInput").value.trim();
       if (!v) return;
       rebuildClientWithPass(v);
-      // Verify the passcode with a write-probe: insert a tiny temp row, then delete it.
-      // RLS returns [] (not an error) for a wrong passcode on READS, so we can't tell
-      // wrong-pass from empty-roster by reading. A write, however, 401s on a wrong passcode.
+      // Verify the passcode with a READ (players are allowed to read; they are NOT allowed to
+      // insert under the two-role rules, so an insert-probe would wrongly reject a valid player).
+      // A correct code returns the roster rows; a wrong code returns [] (RLS blocks it).
       try {
-        const { data, error } = await sb.from("players")
-          .insert({ name: "__passcheck__", num: "", position: "", sort_order: -999 })
-          .select().single();
-        if (error) throw error;              // wrong passcode → RLS rejects the insert
-        await sb.from("players").delete().eq("id", data.id); // clean up the probe row
+        const { data, error } = await sb.from("players").select("id").limit(1);
+        if (error) throw error;
+        if (!data || data.length === 0) {
+          // Either wrong code OR an empty roster. Since the roster has players in practice,
+          // treat empty as "wrong code" and re-prompt. (If the roster were truly empty, the
+          // coach would populate it first.)
+          showPassPrompt(true);
+          return;
+        }
         setPass(v);
         players = await cloudFetch();
         renderPlayerSelf();
