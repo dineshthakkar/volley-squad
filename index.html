@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#1f6feb">
+<title>Volleyball Coach</title>
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="bar">
+    <h1>🏐 Volleyball Coach</h1>
+    <span class="muted" id="savedNote">saved on this device</span>
+  </div>
+  <nav class="tabs">
+    <button class="tab active" data-tab="roster">Roster</button>
+    <button class="tab" data-tab="drills">Drill Library</button>
+    <button class="tab" data-tab="overview">Team Overview</button>
+  </nav>
+</header>
+
+<main class="wrap">
+
+  <!-- ROSTER -->
+  <section id="roster" class="panel active">
+    <h2>Roster</h2>
+    <p class="hint">Add your players (14–18). Set each player's preferred position and assign drills.</p>
+
+    <form id="addPlayerForm" class="row addrow">
+      <input type="text" id="playerName" placeholder="Player name" required maxlength="40">
+      <input type="number" id="playerNum" placeholder="#" min="0" max="99" class="num">
+      <button type="submit" class="primary">Add player</button>
+    </form>
+
+    <div id="playerList" class="players"></div>
+    <p id="rosterEmpty" class="empty">No players yet — add your first above.</p>
+    <p class="count"><span id="playerCount">0</span> players</p>
+  </section>
+
+  <!-- DRILLS -->
+  <section id="drills" class="panel">
+    <h2>Drill Library</h2>
+    <p class="hint">Drills are grouped by position. Edit this list to match your program — assign them to players on the Roster tab.</p>
+    <div id="drillLibrary"></div>
+    <button id="resetDrills" class="ghost small">Reset to default drills</button>
+  </section>
+
+  <!-- OVERVIEW -->
+  <section id="overview" class="panel">
+    <h2>Team Overview</h2>
+    <div class="row">
+      <label for="filterPos" class="muted">Filter by position:</label>
+      <select id="filterPos"><option value="">All positions</option></select>
+      <button id="exportBtn" class="ghost small">⬇ Export</button>
+      <button id="printBtn" class="ghost small">🖨 Print</button>
+    </div>
+    <div id="overviewTable"></div>
+  </section>
+
+</main>
+
+<footer class="wrap muted small">
+  Data is stored only in this browser (localStorage). Phase 1 — coach-entered. Player self-select coming in Phase 2.
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

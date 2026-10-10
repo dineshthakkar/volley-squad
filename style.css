@@ -1,0 +1,64 @@
+:root{
+  --blue:#1f6feb; --blue-dark:#1a5fd0; --ink:#1a1a2e; --muted:#6b7280;
+  --bg:#f6f8fb; --card:#fff; --line:#e4e8ef; --good:#1d8a02; --warn:#e87c00;
+  --chip:#eef3fe;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+  background:var(--bg);color:var(--ink);line-height:1.5}
+header{background:var(--blue);color:#fff;position:sticky;top:0;z-index:10;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+.bar{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;max-width:860px;margin:0 auto}
+.bar h1{font-size:19px;margin:0}
+.tabs{display:flex;max-width:860px;margin:0 auto;gap:2px;padding:0 10px}
+.tab{flex:1;background:transparent;border:none;color:#dbe7ff;font-size:14px;font-weight:600;
+  padding:11px 6px;cursor:pointer;border-bottom:3px solid transparent}
+.tab.active{color:#fff;border-bottom-color:#fff}
+.wrap{max-width:860px;margin:0 auto;padding:16px}
+.panel{display:none}
+.panel.active{display:block}
+h2{font-size:18px;margin:4px 0 4px}
+.hint{color:var(--muted);font-size:13px;margin:0 0 14px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.addrow input{padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-size:15px}
+.addrow input[type=text]{flex:1;min-width:160px}
+.num{width:70px}
+button{font-family:inherit}
+.primary{background:var(--blue);color:#fff;border:none;padding:10px 16px;border-radius:9px;font-weight:600;font-size:15px;cursor:pointer}
+.primary:hover{background:var(--blue-dark)}
+.ghost{background:#fff;border:1px solid var(--line);border-radius:9px;padding:8px 12px;cursor:pointer;font-size:14px}
+.ghost:hover{border-color:var(--blue);color:var(--blue)}
+.small{font-size:13px;padding:6px 10px}
+.players{display:flex;flex-direction:column;gap:10px}
+.pcard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;
+  box-shadow:0 1px 2px rgba(0,0,0,.03)}
+.pcard .ptop{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.jersey{background:var(--ink);color:#fff;border-radius:8px;min-width:30px;height:30px;display:inline-flex;
+  align-items:center;justify-content:center;font-weight:700;font-size:13px;padding:0 6px}
+.pname{font-weight:700;font-size:16px;flex:1;min-width:120px}
+.pcard select{padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px;background:#fff}
+.del{margin-left:auto;background:none;border:none;color:#c0392b;cursor:pointer;font-size:18px;line-height:1}
+.drillassign{margin-top:10px;border-top:1px dashed var(--line);padding-top:10px}
+.drillassign .lbl{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:13px;padding:5px 10px;border-radius:999px;border:1px solid var(--line);background:#fff;cursor:pointer;user-select:none}
+.chip.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+.chip.nodrills{color:var(--muted);border-style:dashed;cursor:default}
+.empty{color:var(--muted);font-style:italic;padding:14px 0}
+.count{color:var(--muted);font-size:13px;margin-top:14px}
+/* drill library */
+.poslib{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:12px}
+.poslib h3{margin:0 0 8px;font-size:15px;color:var(--blue)}
+.drillrow{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.drillrow input{flex:1;padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px}
+.drillrow .del{margin-left:0}
+.addDrill{font-size:13px;color:var(--blue);background:none;border:none;cursor:pointer;padding:4px 0}
+/* overview */
+table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:14px}
+th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);vertical-align:top}
+th{background:#eef3fe;font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:#334}
+tr:last-child td{border-bottom:none}
+.posbadge{display:inline-block;background:var(--chip);color:var(--blue-dark);border-radius:6px;padding:2px 8px;font-size:12px;font-weight:600}
+.posbadge.none{background:#f1f1f1;color:var(--muted)}
+footer{padding:20px 16px 40px;font-size:12px}
+.muted{color:var(--muted)}
+@media print{header,footer,.row,.del,.addrow{display:none!important}.panel{display:block!important}#roster,#drills{display:none!important}}
