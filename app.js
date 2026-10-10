@@ -279,7 +279,7 @@
 
   // ---- export ----
   document.getElementById("exportBtn").addEventListener("click", function () {
-    const lines = ["Volleyball Coach — Team Export", "Generated " + new Date().toLocaleString(), ""];
+    const lines = ["Volley Squad — Team Export", "Generated " + new Date().toLocaleString(), ""];
     state.players.forEach(function (p) {
       lines.push((p.num ? "#" + p.num + " " : "") + p.name + " — " + (p.position || "no position"));
       if (p.drills.length) p.drills.forEach(d => lines.push("   • " + d));

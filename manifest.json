@@ -1,6 +1,6 @@
 {
-  "name": "Volleyball Coach",
-  "short_name": "VB Coach",
+  "name": "Volley Squad",
+  "short_name": "Volley Squad",
   "description": "Roster, positions, and position-specific drill assignment for a volleyball team.",
   "start_url": "./index.html",
   "display": "standalone",

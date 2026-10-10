@@ -1,4 +1,4 @@
-# 🏐 Volleyball Coach
+# 🏐 Volley Squad
 
 A simple, free web app for coaching a volleyball team (14–18 players):
 
@@ -26,7 +26,7 @@ Setter · Outside Hitter · Opposite / Right Side · Middle Blocker · Libero ·
 Plain HTML + CSS + JavaScript. No build step, no dependencies. Installable as a PWA.
 
 ## Hosting (free)
-Deploys as a static site to **GitHub Pages** (Settings → Pages → deploy from `main` / root).
+Deploys as a static site to **GitHub Pages** (Settings → Pages → deploy from `main` / root). Repo: `volley-squad` → live at `https://dineshthakkar.github.io/volley-squad/`.
 
 ---
 Personal project. Keeps only first names + jersey numbers by default — avoid storing other personal data.
