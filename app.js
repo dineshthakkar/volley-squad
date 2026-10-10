@@ -601,38 +601,31 @@
   }
 
   function showPassPrompt(wrong) {
-    const empty = document.getElementById("playerSelfEmpty");
-    const list = document.getElementById("playerSelfList");
-    list.innerHTML = "";
-    empty.style.display = "none";
-    const wrap = document.getElementById("playerSelfList");
-    wrap.innerHTML =
-      '<div class="pcard" style="max-width:360px">' +
-      '<div class="lbl" style="margin-bottom:8px">Enter the team passcode</div>' +
-      (wrong ? '<div class="saveflash" style="color:var(--bad)">Incorrect passcode — try again.</div>' : '') +
-      '<div class="row"><input id="passInput" type="text" placeholder="team passcode" ' +
-      'style="flex:1;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-size:15px"> ' +
-      '<button id="passGo" class="primary small">Enter</button></div>' +
-      '<div class="muted small" style="margin-top:6px">Your coach shared this with the team.</div>' +
+    // Render the passcode box at the TOP (#playerGate) and hide the court/roster until unlocked.
+    document.getElementById("playerContent").style.display = "none";
+    const gate = document.getElementById("playerGate");
+    gate.innerHTML =
+      '<h2 style="margin-top:4px">Enter the team passcode</h2>' +
+      '<p class="hint">Your coach shared this code with the team. Enter it to pick your position.</p>' +
+      '<div class="pcard" style="max-width:380px">' +
+      (wrong ? '<div class="saveflash" style="color:var(--bad);margin-bottom:6px">Incorrect passcode — try again.</div>' : '') +
+      '<div class="row"><input id="passInput" type="text" autofocus placeholder="team passcode" ' +
+      'style="flex:1;padding:12px 14px;border:1px solid var(--line);border-radius:9px;font-size:16px"> ' +
+      '<button id="passGo" class="primary">Enter</button></div>' +
       '</div>';
     const go = async function () {
       const v = document.getElementById("passInput").value.trim();
       if (!v) return;
       rebuildClientWithPass(v);
-      // Verify the passcode with a READ (players are allowed to read; they are NOT allowed to
-      // insert under the two-role rules, so an insert-probe would wrongly reject a valid player).
-      // A correct code returns the roster rows; a wrong code returns [] (RLS blocks it).
+      // Verify with a READ (players can read but NOT insert under the two-role rules).
+      // Correct code returns roster rows; wrong code returns [] (RLS blocks it).
       try {
         const { data, error } = await sb.from("players").select("id").limit(1);
         if (error) throw error;
-        if (!data || data.length === 0) {
-          // Either wrong code OR an empty roster. Since the roster has players in practice,
-          // treat empty as "wrong code" and re-prompt. (If the roster were truly empty, the
-          // coach would populate it first.)
-          showPassPrompt(true);
-          return;
-        }
+        if (!data || data.length === 0) { showPassPrompt(true); return; }
         setPass(v);
+        gate.innerHTML = "";                                     // clear the prompt
+        document.getElementById("playerContent").style.display = ""; // reveal court + roster
         players = await cloudFetch();
         renderPlayerSelf();
       } catch (e) {
@@ -640,15 +633,19 @@
       }
     };
     document.getElementById("passGo").addEventListener("click", go);
-    document.getElementById("passInput").addEventListener("keydown", function (e) { if (e.key === "Enter") go(); });
+    const inp = document.getElementById("passInput");
+    inp.addEventListener("keydown", function (e) { if (e.key === "Enter") go(); });
+    inp.focus();
   }
 
   async function loadPlayerRoster() {
+    // Already have a stored passcode → reveal content and load.
+    document.getElementById("playerGate").innerHTML = "";
+    document.getElementById("playerContent").style.display = "";
     try {
       players = await cloudFetch();
       renderPlayerSelf();
     } catch (e) {
-      // stored passcode may be stale/wrong → re-prompt
       showPassPrompt(true);
     }
   }

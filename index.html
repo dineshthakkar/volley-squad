@@ -101,25 +101,31 @@ Mananbhai, 6, Libero"></textarea>
     <div class="bar"><h1>🏐 Volley Squad</h1></div>
   </header>
   <main class="wrap">
-    <h2>Pick your position</h2>
-    <p class="hint">Tap your name, then choose the spot you'd like to play. The court below shows where each position stands. You can change it anytime.</p>
+    <!-- Passcode gate: shown FIRST, above everything, until the player enters the code -->
+    <div id="playerGate"></div>
 
-    <div id="courtWrap" class="courtwrap">
-      <div class="courtnet">◤ NET ◥</div>
-      <div class="court" id="court">
-        <div class="zone" data-pos="Outside Hitter"><span class="zn">4</span><span class="zl">Outside Hitter</span><span class="zc">front-left</span></div>
-        <div class="zone" data-pos="Middle Blocker"><span class="zn">3</span><span class="zl">Middle Blocker</span><span class="zc">front-center</span></div>
-        <div class="zone" data-pos="Setter"><span class="zn">2</span><span class="zl">Setter / Opposite</span><span class="zc">front-right</span></div>
-        <div class="zone" data-pos="Defensive Specialist – Left"><span class="zn">5</span><span class="zl">Defensive Specialist</span><span class="zc">back-left</span></div>
-        <div class="zone" data-pos="Libero"><span class="zn">6</span><span class="zl">Libero</span><span class="zc">back-center</span></div>
-        <div class="zone" data-pos="Defensive Specialist – Right"><span class="zn">1</span><span class="zl">Defensive Specialist</span><span class="zc">back-right</span></div>
+    <!-- Everything below is hidden until the passcode is accepted -->
+    <div id="playerContent" style="display:none">
+      <h2>Pick your position</h2>
+      <p class="hint">Tap your name, then choose the spot you'd like to play. The court below shows where each position stands. You can change it anytime.</p>
+
+      <div id="courtWrap" class="courtwrap">
+        <div class="courtnet">◤ NET ◥</div>
+        <div class="court" id="court">
+          <div class="zone" data-pos="Outside Hitter"><span class="zn">4</span><span class="zl">Outside Hitter</span><span class="zc">front-left</span></div>
+          <div class="zone" data-pos="Middle Blocker"><span class="zn">3</span><span class="zl">Middle Blocker</span><span class="zc">front-center</span></div>
+          <div class="zone" data-pos="Setter"><span class="zn">2</span><span class="zl">Setter / Opposite</span><span class="zc">front-right</span></div>
+          <div class="zone" data-pos="Defensive Specialist – Left"><span class="zn">5</span><span class="zl">Defensive Specialist</span><span class="zc">back-left</span></div>
+          <div class="zone" data-pos="Libero"><span class="zn">6</span><span class="zl">Libero</span><span class="zc">back-center</span></div>
+          <div class="zone" data-pos="Defensive Specialist – Right"><span class="zn">1</span><span class="zl">Defensive Specialist</span><span class="zc">back-right</span></div>
+        </div>
+        <div class="courtcap muted small">Standard court · net at top · your chosen spot lights up</div>
       </div>
-      <div class="courtcap muted small">Standard court · net at top · your chosen spot lights up</div>
-    </div>
 
-    <div id="playerSelfList" class="players"></div>
-    <p id="playerSelfEmpty" class="empty">Roster not loaded yet…</p>
-    <p class="muted small" id="playerSyncMsg"></p>
+      <div id="playerSelfList" class="players"></div>
+      <p id="playerSelfEmpty" class="empty">Roster not loaded yet…</p>
+      <p class="muted small" id="playerSyncMsg"></p>
+    </div>
   </main>
   <footer class="wrap muted small">Changes save automatically and your coach sees them.</footer>
 </div>
