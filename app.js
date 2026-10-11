@@ -118,13 +118,31 @@
 
   // ---- players state ----
   let players = []; // {id, name, num, position, drills[]}
-  let drills = loadDrills();
 
-  function loadDrills() {
-    try { const r = localStorage.getItem(DRILLS_KEY); if (r) return JSON.parse(r); } catch (e) {}
-    return structuredCloneSafe(DEFAULT_DRILLS);
+  // ---- drills (now in Supabase: coach edits, players read) ----
+  let drills = structuredCloneSafe(DEFAULT_DRILLS); // in-memory; loaded from cloud
+
+  async function cloudLoadDrills() {
+    const { data, error } = await sb.from("drills").select("position,items");
+    if (error) throw error;
+    const map = {};
+    (data || []).forEach(r => { map[r.position] = r.items || []; });
+    // ensure every known position has an entry (fall back to default if missing)
+    const out = {};
+    POSITIONS.forEach(pos => { out[pos] = map[pos] !== undefined ? map[pos] : (DEFAULT_DRILLS[pos] || []).slice(); });
+    return out;
   }
-  function saveDrills() { try { localStorage.setItem(DRILLS_KEY, JSON.stringify(drills)); } catch (e) {} }
+  async function cloudSaveDrillPosition(pos) {
+    // upsert one position's drill list (coach only)
+    const { error } = await sb.from("drills").upsert({ position: pos, items: drills[pos] || [], updated_at: new Date().toISOString() }, { onConflict: "position" });
+    if (error) throw error;
+  }
+
+  // legacy local drills (used only to migrate up the first time)
+  function loadLocalDrills() {
+    try { const r = localStorage.getItem(DRILLS_KEY); if (r) return JSON.parse(r); } catch (e) {}
+    return null;
+  }
 
   function loadLocalPlayers() {
     try { const r = localStorage.getItem(LOCAL_PLAYERS_KEY); if (r) return (JSON.parse(r).players || []); } catch (e) {}
@@ -289,6 +307,19 @@
   async function coachLoad() {
     setStatus("connecting…");
     await reloadPlayers();
+    // load drills from cloud; if cloud has none yet, migrate the direct-pass defaults up
+    try {
+      const { data } = await sb.from("drills").select("position");
+      if (!data || data.length === 0) {
+        const seed = loadLocalDrills() || DEFAULT_DRILLS;
+        drills = {};
+        POSITIONS.forEach(pos => { drills[pos] = (seed[pos] || DEFAULT_DRILLS[pos] || []).slice(); });
+        const rows = POSITIONS.map(pos => ({ position: pos, items: drills[pos], updated_at: new Date().toISOString() }));
+        await sb.from("drills").upsert(rows, { onConflict: "position" });
+      } else {
+        drills = await cloudLoadDrills();
+      }
+    } catch (e) { /* keep in-memory defaults if drills load fails */ }
     const sr = document.getElementById("shareRow"); if (sr) sr.style.display = "";
     const local = loadLocalPlayers();
     if (players.length === 0 && local.length > 0) {
@@ -365,7 +396,7 @@
         p.position = sel.value;
         if (cloud) { try { setStatus("saving…"); await cloudUpdate(p.id, { position: p.position }); setStatus("synced", "ok"); } catch (e) { setStatus("save failed", "err"); } }
         else { saveLocalPlayers(); }
-        renderDrillAssign(p, assignWrap);
+        renderPositionDrills(p.position, drillView);
       });
 
       const del = document.createElement("button");
@@ -383,10 +414,11 @@
       top.appendChild(jersey); top.appendChild(nm); top.appendChild(sel); top.appendChild(del);
       card.appendChild(top);
 
-      const assignWrap = document.createElement("div");
-      assignWrap.className = "drillassign";
-      card.appendChild(assignWrap);
-      renderDrillAssign(p, assignWrap);
+      // read-only: show the drills defined for this player's position (edited in Drill Library)
+      const drillView = document.createElement("div");
+      drillView.className = "drillassign";
+      card.appendChild(drillView);
+      renderPositionDrills(p.position, drillView);
 
       list.appendChild(card);
     });
@@ -394,34 +426,28 @@
     refreshFilterOptions();
   }
 
-  function renderDrillAssign(p, wrap) {
+  // Show (read-only) the drills for a given position — these come from the by-position
+  // Drill Library (coach edits them on the Drill Library tab; no per-player assignment).
+  function renderPositionDrills(position, wrap) {
     wrap.innerHTML = "";
     const lbl = document.createElement("div");
     lbl.className = "lbl";
-    lbl.textContent = p.position ? ("Assign drills · " + posLabel(p.position)) : "Pick a position to see drills";
+    lbl.textContent = position ? ("Drills · " + posLabel(position)) : "Pick a position";
     wrap.appendChild(lbl);
-    if (!p.position) return;
-
+    if (!position) return;
+    const ds = drills[position] || [];
     const chips = document.createElement("div");
     chips.className = "chips";
-    const ds = drills[p.position] || [];
     if (!ds.length) {
       const none = document.createElement("span");
       none.className = "chip nodrills";
-      none.textContent = "No drills for this position yet — add some in Drill Library";
+      none.textContent = "No drills for this position yet — add them in Drill Library";
       chips.appendChild(none);
     }
     ds.forEach(function (d) {
       const chip = document.createElement("span");
-      chip.className = "chip" + (p.drills.indexOf(d) >= 0 ? " on" : "");
+      chip.className = "chip on";
       chip.textContent = d;
-      chip.addEventListener("click", async function () {
-        const i = p.drills.indexOf(d);
-        if (i >= 0) p.drills.splice(i, 1); else p.drills.push(d);
-        chip.classList.toggle("on");
-        if (cloud) { try { setStatus("saving…"); await cloudUpdate(p.id, { drills: p.drills }); setStatus("synced", "ok"); } catch (e) { setStatus("save failed", "err"); } }
-        else { saveLocalPlayers(); }
-      });
       chips.appendChild(chip);
     });
     wrap.appendChild(chips);
@@ -441,14 +467,21 @@
       const add = document.createElement("button");
       add.className = "addDrill";
       add.textContent = "+ add drill";
-      add.addEventListener("click", function () {
+      add.addEventListener("click", async function () {
         if (!drills[pos]) drills[pos] = [];
         drills[pos].push("New drill");
-        saveDrills(); renderDrills();
+        await saveDrillPos(pos); renderDrills();
       });
       box.appendChild(add);
       root.appendChild(box);
     });
+  }
+
+  // Save one position's drills to the cloud (coach only); falls back silently if offline.
+  async function saveDrillPos(pos) {
+    if (!cloud) return;
+    try { setStatus("saving…"); await cloudSaveDrillPosition(pos); setStatus("synced", "ok"); }
+    catch (e) { setStatus("save failed", "err"); }
   }
 
   function drillRow(pos, idx) {
@@ -457,28 +490,37 @@
     const inp = document.createElement("input");
     inp.type = "text";
     inp.value = drills[pos][idx];
-    inp.addEventListener("change", function () {
+    inp.addEventListener("change", async function () {
       const old = drills[pos][idx];
       const val = inp.value.trim() || old;
       drills[pos][idx] = val;
-      saveDrills();
+      await saveDrillPos(pos);
     });
     const del = document.createElement("button");
     del.className = "del";
     del.textContent = "✕";
     del.title = "Delete drill";
-    del.addEventListener("click", function () {
+    del.addEventListener("click", async function () {
       drills[pos].splice(idx, 1);
-      saveDrills(); renderDrills();
+      await saveDrillPos(pos); renderDrills();
     });
     row.appendChild(inp); row.appendChild(del);
     return row;
   }
 
-  function onResetDrills() {
-    if (confirm("Reset the drill library to the default set? Your custom drills will be lost.")) {
+  async function onResetDrills() {
+    if (confirm("Reset the drill library to the default (direct-pass) set and save to the cloud?")) {
       drills = structuredCloneSafe(DEFAULT_DRILLS);
-      saveDrills(); renderDrills();
+      if (cloud) {
+        try {
+          setStatus("saving…");
+          const rows = POSITIONS.map(pos => ({ position: pos, items: drills[pos] || [], updated_at: new Date().toISOString() }));
+          const { error } = await sb.from("drills").upsert(rows, { onConflict: "position" });
+          if (error) throw error;
+          setStatus("synced", "ok");
+        } catch (e) { setStatus("save failed", "err"); }
+      }
+      renderDrills();
     }
   }
 
@@ -674,6 +716,7 @@
         gate.innerHTML = "";                                     // clear the prompt
         document.getElementById("playerContent").style.display = ""; // reveal court + roster
         players = await cloudFetch();
+        try { drills = await cloudLoadDrills(); } catch (e) {}   // load drills so players see them
         renderPlayerSelf();
       } catch (e) {
         showPassPrompt(true);
@@ -691,6 +734,7 @@
     document.getElementById("playerContent").style.display = "";
     try {
       players = await cloudFetch();
+      try { drills = await cloudLoadDrills(); } catch (e) {}   // load drills so players see them
       renderPlayerSelf();
     } catch (e) {
       showPassPrompt(true);
@@ -758,6 +802,13 @@
 
       top.appendChild(jersey); top.appendChild(nm); top.appendChild(sel);
       card.appendChild(top);
+
+      // "Your drills" — show the drills for this player's position (read-only, from cloud library)
+      const dv = document.createElement("div");
+      dv.className = "drillassign";
+      card.appendChild(dv);
+      renderPositionDrills(p.position, dv);
+
       list.appendChild(card);
     });
   }
