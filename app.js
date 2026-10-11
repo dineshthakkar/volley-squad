@@ -8,7 +8,7 @@
 
   // Build version — bump this AND the ?v= query strings in index.html on each
   // meaningful release so browsers/PWAs fetch fresh code instead of a cached copy.
-  const BUILD = "v7";
+  const BUILD = "v8";
 
   const DRILLS_KEY = "vbcoach.drills.v1";
   const LOCAL_PLAYERS_KEY = "vbcoach.v1"; // legacy/local roster (used for migration + offline fallback)
@@ -123,6 +123,12 @@
   // ---- players state ----
   let players = []; // {id, name, num, position, drills[]}
 
+  // True once the coach has entered a passcode AND coachLoad() has finished
+  // successfully. Writes (add/edit/delete drills, roster edits) must not fire
+  // before this — the Supabase client has no coach auth header yet, so any
+  // write would be rejected by RLS and only show up as a vague "save failed".
+  let coachUnlocked = false;
+
   // ---- drills (now in Supabase: coach edits, players read) ----
   let drills = structuredCloneSafe(DEFAULT_DRILLS); // in-memory; loaded from cloud
 
@@ -208,6 +214,7 @@
     // tabs
     document.querySelectorAll(".tab").forEach(function (t) {
       t.addEventListener("click", function () {
+        if (cloud && !coachUnlocked) { setStatus("locked — enter the coach passcode first", "err"); return; }
         document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
         document.querySelectorAll(".panel").forEach(x => x.classList.remove("active"));
         t.classList.add("active");
@@ -266,6 +273,7 @@
       setStatus("local mode (no cloud configured)");
       if (footer) footer.textContent = "Local mode — roster saved only on this device.";
       players = loadLocalPlayers();
+      coachUnlocked = true; // no RLS gate in local mode; writes just go to localStorage
       renderRoster();
       return;
     }
@@ -275,6 +283,7 @@
   }
 
   function showCoachPassPrompt(wrong) {
+    coachUnlocked = false;
     setStatus("locked");
     const list = document.getElementById("playerList");
     document.getElementById("rosterEmpty").style.display = "none";
@@ -324,6 +333,7 @@
         drills = await cloudLoadDrills();
       }
     } catch (e) { /* keep in-memory defaults if drills load fails */ }
+    coachUnlocked = true;
     const sr = document.getElementById("shareRow"); if (sr) sr.style.display = "";
     const local = loadLocalPlayers();
     if (players.length === 0 && local.length > 0) {
@@ -475,8 +485,9 @@
   // Save one position's drills to the cloud (coach only); falls back silently if offline.
   async function saveDrillPos(pos) {
     if (!cloud) return;
+    if (!coachUnlocked) { setStatus("locked — enter the coach passcode first", "err"); return; }
     try { setStatus("saving…"); await cloudSaveDrillPosition(pos); setStatus("synced", "ok"); }
-    catch (e) { setStatus("save failed", "err"); }
+    catch (e) { setStatus("save failed: " + e.message, "err"); }
   }
 
   function drillRow(pos, idx) {
@@ -504,6 +515,7 @@
   }
 
   async function onResetDrills() {
+    if (cloud && !coachUnlocked) { setStatus("locked — enter the coach passcode first", "err"); return; }
     if (confirm("Reset the drill library to the default (direct-pass) set and save to the cloud?")) {
       drills = structuredCloneSafe(DEFAULT_DRILLS);
       if (cloud) {
@@ -513,7 +525,7 @@
           const { error } = await sb.from("drills").upsert(rows, { onConflict: "position" });
           if (error) throw error;
           setStatus("synced", "ok");
-        } catch (e) { setStatus("save failed", "err"); }
+        } catch (e) { setStatus("save failed: " + e.message, "err"); }
       }
       renderDrills();
     }
