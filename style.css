@@ -34,6 +34,9 @@ button{font-family:inherit}
 .pcard .ptop{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .jersey{background:var(--ink);color:#fff;border-radius:8px;min-width:30px;height:30px;display:inline-flex;
   align-items:center;justify-content:center;font-weight:700;font-size:13px;padding:0 6px}
+.jersey-edit{width:48px;text-align:center;border:1px solid var(--ink);cursor:text;-moz-appearance:textfield}
+.jersey-edit::-webkit-outer-spin-button,.jersey-edit::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.jersey-edit::placeholder{color:#9aa0ad}
 .pname{font-weight:700;font-size:16px;flex:1;min-width:120px}
 .pcard select{padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px;background:#fff}
 .del{margin-left:auto;background:none;border:none;color:#c0392b;cursor:pointer;font-size:18px;line-height:1}
