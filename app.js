@@ -24,14 +24,60 @@
   POSITION_DEFS.forEach(p => { POS_LABEL[p.key] = p.label; POS_ORDER[p.key] = p.order; });
   function posLabel(key) { return POS_LABEL[key] || key; }
 
+  // Drills tuned for this team's style: NO rotation (players hold their spot) and a
+  // DIRECT-PASS game (receive the ball and send it back over the net in 1–2 touches —
+  // not pass→set→spike). Focus: serve receive, controlled passing, directing the ball
+  // back over, serving, and covering your own zone.
   const DEFAULT_DRILLS = {
-    "Setter": ["Setting footwork ladder", "Hand positioning / soft hands", "Back-set accuracy", "Jump-set reps", "Setter–hitter tempo timing"],
-    "Outside Hitter": ["Approach footwork (4-step)", "High-ball swing timing", "Cross-court vs line hitting", "Serve-receive platform", "Tooling the block"],
-    "Opposite / Right Side": ["Right-side approach timing", "Back-row attack (pipe/D)", "Blocking the OH", "Slide attack", "Transition footwork"],
-    "Middle Blocker": ["Blocking footwork (swing block)", "Quick-attack (tempo 1)", "Read-blocking the setter", "Lateral shuffle + close", "Slide timing"],
-    "Libero": ["Platform passing reps", "Digging hard-driven balls", "Pepper (control)", "Serve-receive movement", "Emergency / pursuit"],
-    "Defensive Specialist – Left": ["Serve-receive passing (Zone 5)", "Reading the hitter", "Low-posture digging", "Court coverage (left back)", "Short-serve recovery"],
-    "Defensive Specialist – Right": ["Serve-receive passing (Zone 1)", "Reading the hitter", "Low-posture digging", "Court coverage (right back)", "Serve from Zone 1"],
+    "Setter": [
+      "Receive at the net & redirect over (1–2 touches)",
+      "Overhead control: clean two-hand return over the net",
+      "Tip/dump placement into open court",
+      "Cover the front-right zone (short & deep balls)",
+      "Set-to-self then return over (ball control)"
+    ],
+    "Outside Hitter": [
+      "Serve-receive from front-left, platform to target",
+      "Direct return over the net off a hard-driven ball",
+      "Angle control: send it cross-court vs down the line",
+      "Cover front-left zone (short tips + deep drives)",
+      "Attack-to-pass: controlled downball over the net"
+    ],
+    "Opposite / Right Side": [
+      "Receive at front-right & return over cleanly",
+      "Handle hard-driven balls to the right side",
+      "Placement: find the open area across the net",
+      "Cover front-right zone (net + deep)",
+      "Controlled downball return over the net"
+    ],
+    "Middle Blocker": [
+      "Receive at the net (front-center) & redirect over",
+      "Return hard-driven balls hit straight at you",
+      "Soft block / rebound control back over the net",
+      "Cover front-center zone (short dinks + deep)",
+      "Two-hand overhead return under control"
+    ],
+    "Libero": [
+      "Serve-receive passing (platform to a clean target)",
+      "Dig hard-driven balls & return deep over the net",
+      "Controlled return over the net (don't overpass)",
+      "Cover back-center zone & call the ball",
+      "Emergency passes: run-through & pursuit"
+    ],
+    "Defensive Specialist – Left": [
+      "Serve-receive from Zone 5 (back-left) to target",
+      "Dig & direct the ball back over on first touch",
+      "Read the server / hitter and move early",
+      "Cover back-left zone (deep corners)",
+      "Serve: consistent deep serves to the opponent"
+    ],
+    "Defensive Specialist – Right": [
+      "Serve-receive from Zone 1 (back-right) to target",
+      "Dig & direct the ball back over on first touch",
+      "Read the server / hitter and move early",
+      "Cover back-right zone (deep corners)",
+      "Serve from Zone 1: placement to the open court"
+    ],
   };
 
   function structuredCloneSafe(o) { return JSON.parse(JSON.stringify(o)); }
