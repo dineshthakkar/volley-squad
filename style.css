@@ -77,6 +77,8 @@ button{font-family:inherit}
 /* drill library */
 .poslib{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:12px}
 .poslib h3{margin:0 0 8px;font-size:15px;color:var(--blue)}
+.poslib-common{border-color:var(--blue);border-width:2px}
+.poslib-common h3{color:var(--good,#1a9c4a)}
 /* player drills tab */
 .ppanel{margin-top:4px}
 .drillpanel{margin-top:4px}

@@ -8,7 +8,7 @@
 
   // Build version — bump this AND the ?v= query strings in index.html on each
   // meaningful release so browsers/PWAs fetch fresh code instead of a cached copy.
-  const BUILD = "v8";
+  const BUILD = "v9";
 
   const DRILLS_KEY = "vbcoach.drills.v1";
   const LOCAL_PLAYERS_KEY = "vbcoach.v1"; // legacy/local roster (used for migration + offline fallback)
@@ -27,6 +27,13 @@
   const POS_LABEL = {}; const POS_ORDER = {};
   POSITION_DEFS.forEach(p => { POS_LABEL[p.key] = p.label; POS_ORDER[p.key] = p.order; });
   function posLabel(key) { return POS_LABEL[key] || key; }
+
+  // "Common" drills apply to every position (e.g. underarm serve, passing video).
+  // Stored as its own row in the `drills` table (position = COMMON_KEY) so adding
+  // one entry here shows up for all 7 positions instead of needing to be copy-pasted
+  // into each position's list.
+  const COMMON_KEY = "__common__";
+  const COMMON_LABEL = "Common — all positions";
 
   // Drills tuned for this team's style: NO rotation (players hold their spot) and a
   // DIRECT-PASS game (receive the ball and send it back over the net in 1–2 touches —
@@ -84,6 +91,12 @@
     ],
   };
 
+  // Drills shared by every position regardless of role.
+  const DEFAULT_COMMON_DRILLS = [
+    "Passing Video: https://www.youtube.com/watch?v=gOgfoEGUDCA",
+    "Under arm serve video: https://www.youtube.com/watch?v=7SrLyQv1WUY"
+  ];
+
   function structuredCloneSafe(o) { return JSON.parse(JSON.stringify(o)); }
   function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
   function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
@@ -137,8 +150,9 @@
     if (error) throw error;
     const map = {};
     (data || []).forEach(r => { map[r.position] = r.items || []; });
-    // ensure every known position has an entry (fall back to default if missing)
+    // ensure every known position (+ the common bucket) has an entry (fall back to default if missing)
     const out = {};
+    out[COMMON_KEY] = map[COMMON_KEY] !== undefined ? map[COMMON_KEY] : DEFAULT_COMMON_DRILLS.slice();
     POSITIONS.forEach(pos => { out[pos] = map[pos] !== undefined ? map[pos] : (DEFAULT_DRILLS[pos] || []).slice(); });
     return out;
   }
@@ -326,8 +340,10 @@
       if (!data || data.length === 0) {
         const seed = loadLocalDrills() || DEFAULT_DRILLS;
         drills = {};
+        drills[COMMON_KEY] = DEFAULT_COMMON_DRILLS.slice();
         POSITIONS.forEach(pos => { drills[pos] = (seed[pos] || DEFAULT_DRILLS[pos] || []).slice(); });
-        const rows = POSITIONS.map(pos => ({ position: pos, items: drills[pos], updated_at: new Date().toISOString() }));
+        const rows = [{ position: COMMON_KEY, items: drills[COMMON_KEY], updated_at: new Date().toISOString() }]
+          .concat(POSITIONS.map(pos => ({ position: pos, items: drills[pos], updated_at: new Date().toISOString() })));
         await sb.from("drills").upsert(rows, { onConflict: "position" });
       } else {
         drills = await cloudLoadDrills();
@@ -462,24 +478,33 @@
   function renderDrills() {
     const root = document.getElementById("drillLibrary");
     root.innerHTML = "";
+
+    // Common box first — applies to every position (e.g. underarm serve, passing video).
+    root.appendChild(drillBox(COMMON_KEY, COMMON_LABEL, "poslib poslib-common"));
+
     POSITIONS.forEach(function (pos) {
-      const box = document.createElement("div");
-      box.className = "poslib";
-      const h = document.createElement("h3");
-      h.textContent = posLabel(pos);
-      box.appendChild(h);
-      (drills[pos] || []).forEach(function (d, idx) { box.appendChild(drillRow(pos, idx)); });
-      const add = document.createElement("button");
-      add.className = "addDrill";
-      add.textContent = "+ add drill";
-      add.addEventListener("click", async function () {
-        if (!drills[pos]) drills[pos] = [];
-        drills[pos].push("New drill");
-        await saveDrillPos(pos); renderDrills();
-      });
-      box.appendChild(add);
-      root.appendChild(box);
+      root.appendChild(drillBox(pos, posLabel(pos), "poslib"));
     });
+  }
+
+  // Build one drill box (used for both the common bucket and each position).
+  function drillBox(key, label, className) {
+    const box = document.createElement("div");
+    box.className = className;
+    const h = document.createElement("h3");
+    h.textContent = label;
+    box.appendChild(h);
+    (drills[key] || []).forEach(function (d, idx) { box.appendChild(drillRow(key, idx)); });
+    const add = document.createElement("button");
+    add.className = "addDrill";
+    add.textContent = "+ add drill";
+    add.addEventListener("click", async function () {
+      if (!drills[key]) drills[key] = [];
+      drills[key].push("New drill");
+      await saveDrillPos(key); renderDrills();
+    });
+    box.appendChild(add);
+    return box;
   }
 
   // Save one position's drills to the cloud (coach only); falls back silently if offline.
@@ -518,10 +543,12 @@
     if (cloud && !coachUnlocked) { setStatus("locked — enter the coach passcode first", "err"); return; }
     if (confirm("Reset the drill library to the default (direct-pass) set and save to the cloud?")) {
       drills = structuredCloneSafe(DEFAULT_DRILLS);
+      drills[COMMON_KEY] = DEFAULT_COMMON_DRILLS.slice();
       if (cloud) {
         try {
           setStatus("saving…");
-          const rows = POSITIONS.map(pos => ({ position: pos, items: drills[pos] || [], updated_at: new Date().toISOString() }));
+          const rows = [{ position: COMMON_KEY, items: drills[COMMON_KEY], updated_at: new Date().toISOString() }]
+            .concat(POSITIONS.map(pos => ({ position: pos, items: drills[pos] || [], updated_at: new Date().toISOString() })));
           const { error } = await sb.from("drills").upsert(rows, { onConflict: "position" });
           if (error) throw error;
           setStatus("synced", "ok");
@@ -849,6 +876,11 @@
     // Zone 2 box = Setter/Opposite: show both roles' drills if present.
     const keys = zonePos === "Setter" ? ["Setter", "Opposite / Right Side"] : [zonePos];
     let html = "";
+    const common = drills[COMMON_KEY] || [];
+    if (common.length) {
+      html += '<div class="poslib poslib-common"><h3>' + esc(COMMON_LABEL) + "</h3>" +
+        '<ul class="drill-list">' + common.map(d => "<li>" + esc(d) + "</li>").join("") + "</ul></div>";
+    }
     keys.forEach(function (k) {
       const ds = drills[k] || [];
       if (zonePos === "Setter" && k === "Opposite / Right Side" && ds.length === 0) return;
