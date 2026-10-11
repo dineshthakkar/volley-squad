@@ -452,6 +452,7 @@
 
   let overviewSort = { key: "position", dir: 1 };
   function renderOverview() {
+    renderCoachCourt();
     const root = document.getElementById("overviewTable");
     const filter = document.getElementById("filterPos").value;
     const rows = players.filter(p => !filter || p.position === filter);
@@ -651,6 +652,10 @@
   }
 
   function renderPlayerSelf() {
+    // Rebuild the court with everyone's names placed in their chosen zones (live).
+    const courtWrap = document.getElementById("courtWrap");
+    if (courtWrap) courtWrap.innerHTML = buildCourtWithNames();
+
     const list = document.getElementById("playerSelfList");
     const empty = document.getElementById("playerSelfEmpty");
     list.innerHTML = "";
@@ -691,10 +696,11 @@
       sel.addEventListener("change", async function () {
         const prev = p.position;
         p.position = sel.value;
-        highlightCourt(p.position);
         try {
           await cloudUpdate(p.id, { position: p.position });
           flashSaved(card, "Saved ✓");
+          renderPlayerSelf();            // re-place names on the court (their name moves zones)
+          highlightCourt(p.position);    // keep their chosen zone lit
         } catch (e) {
           p.position = prev; sel.value = prev;
           highlightCourt(prev);
@@ -708,6 +714,48 @@
       card.appendChild(top);
       list.appendChild(card);
     });
+  }
+
+  // Map a position key to the court zone's data-pos (Opposite shares Setter's Zone 2 box).
+  function zonePosFor(key) { return key === "Opposite / Right Side" ? "Setter" : key; }
+
+  // Court zone definitions (must match the static court markup order/labels).
+  const COURT_ZONES = [
+    { pos: "Outside Hitter",               zn: "4", zl: "Outside Hitter",       zc: "front-left" },
+    { pos: "Middle Blocker",               zn: "3", zl: "Middle Blocker",       zc: "front-center" },
+    { pos: "Setter",                       zn: "2", zl: "Setter / Opposite",    zc: "front-right" },
+    { pos: "Defensive Specialist – Left",  zn: "5", zl: "Defensive Specialist", zc: "back-left" },
+    { pos: "Libero",                       zn: "6", zl: "Libero",               zc: "back-center" },
+    { pos: "Defensive Specialist – Right", zn: "1", zl: "Defensive Specialist", zc: "back-right" },
+  ];
+
+  // Build the court HTML with each player's NAME placed in their chosen zone (live from `players`).
+  function buildCourtWithNames() {
+    // group player names by the zone their position maps to
+    const byZone = {};
+    players.forEach(function (p) {
+      if (!p.position) return;
+      const z = zonePosFor(p.position);
+      (byZone[z] = byZone[z] || []).push(p.name);
+    });
+    let cells = COURT_ZONES.map(function (z) {
+      const names = (byZone[z.pos] || []).slice().sort((a, b) => a.localeCompare(b));
+      const chips = names.length
+        ? '<div class="courtnames">' + names.map(n => '<span class="cname">' + esc(n) + '</span>').join("") + '</div>'
+        : '<div class="courtnames empty-z">—</div>';
+      return '<div class="zone' + (names.length ? ' has' : '') + '" data-pos="' + esc(z.pos) + '">' +
+        '<span class="zn">' + z.zn + '</span>' +
+        '<span class="zl">' + z.zl + '</span>' +
+        '<span class="zc">' + z.zc + '</span>' + chips + '</div>';
+    }).join("");
+    return '<div class="courtnet">◤ NET ◥</div>' +
+      '<div class="court court-named" id="court">' + cells + '</div>' +
+      '<div class="courtcap muted small">Standard court · net at top · players shown in their chosen spot</div>';
+  }
+
+  function renderCoachCourt() {
+    const el = document.getElementById("coachCourt");
+    if (el) el.innerHTML = buildCourtWithNames();
   }
 
   function highlightCourt(positionKey) {

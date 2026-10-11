@@ -63,6 +63,13 @@ button{font-family:inherit}
 .zone.lit .zn{color:var(--blue);background:#fff}
 .zone.lit .zl,.zone.lit .zc{color:#fff}
 .courtcap{text-align:center;margin-top:6px}
+/* player names placed inside court zones */
+.court-named .zone{min-height:92px;justify-content:flex-start}
+.courtnames{display:flex;flex-wrap:wrap;gap:4px;justify-content:center;margin-top:6px}
+.cname{font-size:11px;font-weight:700;background:#fff;color:#5a3418;border:1px solid #d79b6e;border-radius:999px;padding:2px 8px}
+.courtnames.empty-z{color:#b78a63;font-weight:400}
+.court-named .zone.has{background:#ecb98f}
+.zone.lit .cname{background:#fff;color:var(--blue-dark);border-color:#fff}
 .count{color:var(--muted);font-size:13px;margin-top:14px}
 /* drill library */
 .poslib{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:12px}
