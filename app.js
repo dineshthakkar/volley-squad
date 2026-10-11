@@ -8,7 +8,7 @@
 
   // Build version — bump this AND the ?v= query strings in index.html on each
   // meaningful release so browsers/PWAs fetch fresh code instead of a cached copy.
-  const BUILD = "v6";
+  const BUILD = "v7";
 
   const DRILLS_KEY = "vbcoach.drills.v1";
   const LOCAL_PLAYERS_KEY = "vbcoach.v1"; // legacy/local roster (used for migration + offline fallback)
@@ -383,23 +383,29 @@
       jersey.type = "number";
       jersey.min = "0";
       jersey.max = "99";
+      jersey.step = "1";
       jersey.placeholder = "#";
       jersey.title = "Jersey number (tap to edit)";
       jersey.value = p.num != null && p.num !== "" ? p.num : "";
-      jersey.addEventListener("change", async function () {
+      const saveNum = async function () {
         const raw = jersey.value.trim();
         const next = raw === "" ? null : parseInt(raw, 10);
         if (raw !== "" && (isNaN(next) || next < 0 || next > 99)) {
           jersey.value = p.num != null ? p.num : "";   // revert invalid entry
           return;
         }
+        if (next === p.num) return;                     // nothing changed
         const prev = p.num;
         p.num = next;
         if (cloud) {
           try { setStatus("saving…"); await cloudUpdate(p.id, { num: next }); setStatus("synced", "ok"); }
           catch (e) { p.num = prev; jersey.value = prev != null ? prev : ""; setStatus("save failed", "err"); }
         } else { saveLocalPlayers(); }
-      });
+      };
+      jersey.addEventListener("change", saveNum);
+      jersey.addEventListener("blur", saveNum);
+      // Enter commits + unfocuses (never submits a form)
+      jersey.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); jersey.blur(); } });
 
       const nm = document.createElement("span");
       nm.className = "pname";
