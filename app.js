@@ -6,6 +6,10 @@
 (function () {
   "use strict";
 
+  // Build version — bump this AND the ?v= query strings in index.html on each
+  // meaningful release so browsers/PWAs fetch fresh code instead of a cached copy.
+  const BUILD = "v4";
+
   const DRILLS_KEY = "vbcoach.drills.v1";
   const LOCAL_PLAYERS_KEY = "vbcoach.v1"; // legacy/local roster (used for migration + offline fallback)
 
@@ -885,5 +889,13 @@
   // ============================================================
   //  BOOT
   // ============================================================
+  // Stamp the visible build label in the footer(s) so you can confirm the live version.
+  (function stampBuild() {
+    ["buildTag", "buildTagPlayer"].forEach(function (id) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = "· build " + BUILD;
+    });
+  })();
+
   if (isPlayerView) initPlayer(); else initCoach();
 })();

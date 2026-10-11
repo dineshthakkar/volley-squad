@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#1f6feb">
 <title>Volley Squad</title>
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
 
@@ -93,6 +93,7 @@ Mananbhai, 6, Libero"></textarea>
 
 <footer class="wrap muted small" id="coachFooter">
   Cloud mode — roster synced via Supabase. Players can self-select their position from the shared link.
+  <span class="buildtag" id="buildTag"></span>
 </footer>
 </div><!-- /coachApp -->
 
@@ -132,12 +133,12 @@ Mananbhai, 6, Libero"></textarea>
       <p class="muted small" id="playerSyncMsg"></p>
     </div>
   </main>
-  <footer class="wrap muted small">Changes save automatically and your coach sees them.</footer>
+  <footer class="wrap muted small">Changes save automatically and your coach sees them. <span class="buildtag" id="buildTagPlayer"></span></footer>
 </div>
 
 <!-- Supabase JS client (v2) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script src="supabase-config.js"></script>
-<script src="app.js"></script>
+<script src="supabase-config.js?v=4"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>
