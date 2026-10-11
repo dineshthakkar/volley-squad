@@ -2,3 +2,7 @@
 node_modules/
 *.log
 .env
+
+# personal local-only notes — not for the public repo
+PROJECT-STATUS.md
+LEARNING-GUIDE.html

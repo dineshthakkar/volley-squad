@@ -396,7 +396,6 @@
         p.position = sel.value;
         if (cloud) { try { setStatus("saving…"); await cloudUpdate(p.id, { position: p.position }); setStatus("synced", "ok"); } catch (e) { setStatus("save failed", "err"); } }
         else { saveLocalPlayers(); }
-        renderPositionDrills(p.position, drillView);
       });
 
       const del = document.createElement("button");
@@ -414,43 +413,10 @@
       top.appendChild(jersey); top.appendChild(nm); top.appendChild(sel); top.appendChild(del);
       card.appendChild(top);
 
-      // read-only: show the drills defined for this player's position (edited in Drill Library)
-      const drillView = document.createElement("div");
-      drillView.className = "drillassign";
-      card.appendChild(drillView);
-      renderPositionDrills(p.position, drillView);
-
       list.appendChild(card);
     });
 
     refreshFilterOptions();
-  }
-
-  // Show (read-only) the drills for a given position — these come from the by-position
-  // Drill Library (coach edits them on the Drill Library tab; no per-player assignment).
-  function renderPositionDrills(position, wrap) {
-    wrap.innerHTML = "";
-    const lbl = document.createElement("div");
-    lbl.className = "lbl";
-    lbl.textContent = position ? ("Drills · " + posLabel(position)) : "Pick a position";
-    wrap.appendChild(lbl);
-    if (!position) return;
-    const ds = drills[position] || [];
-    const chips = document.createElement("div");
-    chips.className = "chips";
-    if (!ds.length) {
-      const none = document.createElement("span");
-      none.className = "chip nodrills";
-      none.textContent = "No drills for this position yet — add them in Drill Library";
-      chips.appendChild(none);
-    }
-    ds.forEach(function (d) {
-      const chip = document.createElement("span");
-      chip.className = "chip on";
-      chip.textContent = d;
-      chips.appendChild(chip);
-    });
-    wrap.appendChild(chips);
   }
 
   // ---- drill library (local) ----
