@@ -30,3 +30,5 @@ Deploys as a static site to **GitHub Pages** (Settings → Pages → deploy from
 
 ---
 Personal project. Keeps only first names + jersey numbers by default — avoid storing other personal data.
+
+© 2026 Dinesh Thakkar. All rights reserved.

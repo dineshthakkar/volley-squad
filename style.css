@@ -94,5 +94,6 @@ tr:last-child td{border-bottom:none}
 .posbadge.none{background:#f1f1f1;color:var(--muted)}
 footer{padding:20px 16px 40px;font-size:12px}
 .buildtag{opacity:.55;font-size:11px;margin-left:4px}
+.copy{opacity:.55;font-size:11px;margin-left:4px}
 .muted{color:var(--muted)}
 @media print{header,footer,.row,.del,.addrow{display:none!important}.panel{display:block!important}#roster,#drills{display:none!important}}
