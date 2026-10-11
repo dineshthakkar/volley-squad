@@ -678,6 +678,17 @@
     document.getElementById("coachApp").style.display = "none";
     document.getElementById("playerApp").style.display = "";
 
+    // Player-view tab switching (Pick your position / Drills to practice).
+    document.querySelectorAll('#playerTabs .tab').forEach(function (t) {
+      t.addEventListener("click", function () {
+        const which = t.getAttribute("data-ptab");
+        document.querySelectorAll('#playerTabs .tab').forEach(x => x.classList.remove("active"));
+        t.classList.add("active");
+        document.getElementById("ptab-pick").style.display = which === "pick" ? "" : "none";
+        document.getElementById("ptab-drills").style.display = which === "drills" ? "" : "none";
+      });
+    });
+
     if (!cloud) {
       document.getElementById("playerSelfEmpty").textContent =
         "This link needs the cloud to be set up. Ask your coach.";
@@ -742,9 +753,13 @@
   }
 
   function renderPlayerSelf() {
-    // Rebuild the court with everyone's names placed in their chosen zones (live).
-    const courtWrap = document.getElementById("courtWrap");
-    if (courtWrap) courtWrap.innerHTML = buildCourtWithNames();
+    // Render the court (with names) into BOTH tab panels.
+    const pick = document.getElementById("courtWrapPick");
+    const dr = document.getElementById("courtWrapDrills");
+    if (pick) pick.innerHTML = buildCourtWithNames();
+    if (dr) dr.innerHTML = buildCourtWithNames();
+    wireDrillCourt();           // make the Drills-tab court zones tappable
+    document.getElementById("playerTabs").style.display = "";
 
     const list = document.getElementById("playerSelfList");
     const empty = document.getElementById("playerSelfEmpty");
@@ -802,15 +817,40 @@
 
       top.appendChild(jersey); top.appendChild(nm); top.appendChild(sel);
       card.appendChild(top);
-
-      // "Your drills" — show the drills for this player's position (read-only, from cloud library)
-      const dv = document.createElement("div");
-      dv.className = "drillassign";
-      card.appendChild(dv);
-      renderPositionDrills(p.position, dv);
-
       list.appendChild(card);
     });
+  }
+
+  // Make the Drills-tab court zones tappable → show that position's drills below.
+  function wireDrillCourt() {
+    const dr = document.getElementById("courtWrapDrills");
+    if (!dr) return;
+    dr.querySelectorAll(".zone").forEach(function (z) {
+      z.style.cursor = "pointer";
+      z.addEventListener("click", function () {
+        const pos = z.getAttribute("data-pos"); // note: Opposite maps into the Setter/Zone-2 box
+        dr.querySelectorAll(".zone").forEach(x => x.classList.remove("lit"));
+        z.classList.add("lit");
+        showDrillPanel(pos);
+      });
+    });
+  }
+
+  function showDrillPanel(zonePos) {
+    const panel = document.getElementById("drillPanel");
+    if (!panel) return;
+    // Zone 2 box = Setter/Opposite: show both roles' drills if present.
+    const keys = zonePos === "Setter" ? ["Setter", "Opposite / Right Side"] : [zonePos];
+    let html = "";
+    keys.forEach(function (k) {
+      const ds = drills[k] || [];
+      if (zonePos === "Setter" && k === "Opposite / Right Side" && ds.length === 0) return;
+      html += '<div class="poslib"><h3>' + esc(posLabel(k)) + "</h3>";
+      if (!ds.length) html += '<p class="muted small">No drills set for this position yet.</p>';
+      else html += '<ul class="drill-list">' + ds.map(d => "<li>" + esc(d) + "</li>").join("") + "</ul>";
+      html += "</div>";
+    });
+    panel.innerHTML = html;
   }
 
   // Map a position key to the court zone's data-pos (Opposite shares Setter's Zone 2 box).
@@ -846,7 +886,7 @@
         '<span class="zc">' + z.zc + '</span>' + chips + '</div>';
     }).join("");
     return '<div class="courtnet">◤ NET ◥</div>' +
-      '<div class="court court-named" id="court">' + cells + '</div>' +
+      '<div class="court court-named">' + cells + '</div>' +
       '<div class="courtcap muted small">Standard court · net at top · players shown in their chosen spot</div>';
   }
 
@@ -856,7 +896,9 @@
   }
 
   function highlightCourt(positionKey) {
-    const court = document.getElementById("court");
+    // Highlight the chosen zone on the Pick-tab court (the one with the roster selectors).
+    const wrap = document.getElementById("courtWrapPick");
+    const court = wrap ? wrap.querySelector(".court") : null;
     if (!court) return;
     // Opposite shares Zone 2 with Setter (the court box is labeled "Setter / Opposite").
     const target = positionKey === "Opposite / Right Side" ? "Setter" : positionKey;
