@@ -102,3 +102,6 @@ footer{padding:20px 16px 40px;font-size:12px}
 .copy{opacity:.55;font-size:11px;margin-left:4px}
 .muted{color:var(--muted)}
 @media print{header,footer,.row,.del,.addrow{display:none!important}.panel{display:block!important}#roster,#drills{display:none!important}}
+
+.drillchart{display:block;width:100%;max-width:100%;height:auto;border-radius:9px;
+  border:1px solid var(--line);margin:10px 0 16px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
