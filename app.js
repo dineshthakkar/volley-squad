@@ -8,7 +8,7 @@
 
   // Build version — bump this AND the ?v= query strings in index.html on each
   // meaningful release so browsers/PWAs fetch fresh code instead of a cached copy.
-  const BUILD = "v9";
+  const BUILD = "v10";
 
   const DRILLS_KEY = "vbcoach.drills.v1";
   const LOCAL_PLAYERS_KEY = "vbcoach.v1"; // legacy/local roster (used for migration + offline fallback)
@@ -17,12 +17,20 @@
   const POSITION_DEFS = [
     { key: "Outside Hitter",         label: "Outside Hitter (front-left · Zone 4)",            zone: 4, order: 1 },
     { key: "Middle Blocker",         label: "Middle Blocker (front-center · Zone 3)",          zone: 3, order: 2 },
-    { key: "Setter",                 label: "Setter (front-right · Zone 2)",                   zone: 2, order: 3 },
-    { key: "Opposite / Right Side",  label: "Opposite / Right Side (front-right · Zone 2)",    zone: 2, order: 4 },
-    { key: "Defensive Specialist – Left",  label: "Defensive Specialist – Left (back-left · Zone 5)",  zone: 5, order: 5 },
-    { key: "Libero",                 label: "Libero (back-center · Zone 6)",                   zone: 6, order: 6 },
-    { key: "Defensive Specialist – Right", label: "Defensive Specialist – Right (back-right · Zone 1)", zone: 1, order: 7 },
+    { key: "Setter / Opposite",      label: "Setter / Opposite (front-right · Zone 2)",        zone: 2, order: 3 },
+    { key: "Defensive Specialist – Left",  label: "Defensive Specialist – Left (back-left · Zone 5)",  zone: 5, order: 4 },
+    { key: "Libero",                 label: "Libero (back-center · Zone 6)",                   zone: 6, order: 5 },
+    { key: "Defensive Specialist – Right", label: "Defensive Specialist – Right (back-right · Zone 1)", zone: 1, order: 6 },
   ];
+
+  // Legacy position keys (pre-merge) → their new merged key. Used to migrate the
+  // cloud (players.position + drills.position) to the merged "Setter / Opposite"
+  // once, on coach load. Idempotent: only rewrites these exact old keys.
+  const LEGACY_POSITION_MAP = {
+    "Setter": "Setter / Opposite",
+    "Opposite / Right Side": "Setter / Opposite",
+  };
+  function canonPosition(key) { return LEGACY_POSITION_MAP[key] || key || ""; }
   const POSITIONS = POSITION_DEFS.map(p => p.key);
   const POS_LABEL = {}; const POS_ORDER = {};
   POSITION_DEFS.forEach(p => { POS_LABEL[p.key] = p.label; POS_ORDER[p.key] = p.order; });
@@ -40,12 +48,14 @@
   // not pass→set→spike). Focus: serve receive, controlled passing, directing the ball
   // back over, serving, and covering your own zone.
   const DEFAULT_DRILLS = {
-    "Setter": [
+    "Setter / Opposite": [
       "Receive at the net & redirect over (1–2 touches)",
       "Overhead control: clean two-hand return over the net",
       "Tip/dump placement into open court",
       "Cover the front-right zone (short & deep balls)",
-      "Set-to-self then return over (ball control)"
+      "Set-to-self then return over (ball control)",
+      "Handle hard-driven balls to the right side",
+      "Placement: find the open area across the net"
     ],
     "Outside Hitter": [
       "Serve-receive from front-left, platform to target",
@@ -53,13 +63,6 @@
       "Angle control: send it cross-court vs down the line",
       "Cover front-left zone (short tips + deep drives)",
       "Attack-to-pass: controlled downball over the net"
-    ],
-    "Opposite / Right Side": [
-      "Receive at front-right & return over cleanly",
-      "Handle hard-driven balls to the right side",
-      "Placement: find the open area across the net",
-      "Cover front-right zone (net + deep)",
-      "Controlled downball return over the net"
     ],
     "Middle Blocker": [
       "Receive at the net (front-center) & redirect over",
@@ -349,6 +352,8 @@
         drills = await cloudLoadDrills();
       }
     } catch (e) { /* keep in-memory defaults if drills load fails */ }
+    // One-time merge of the old Setter / Opposite positions into "Setter / Opposite".
+    try { await migratePositions(); } catch (e) { /* non-fatal; log via status */ setStatus("position merge skipped: " + e.message, "err"); }
     coachUnlocked = true;
     const sr = document.getElementById("shareRow"); if (sr) sr.style.display = "";
     const local = loadLocalPlayers();
@@ -358,6 +363,58 @@
       if (mb) mb.style.display = "";
     }
     renderRoster();
+  }
+
+  // One-time, idempotent migration: fold the pre-merge "Setter" and "Opposite / Right Side"
+  // positions into the single merged "Setter / Opposite". Rewrites players.position and
+  // consolidates the two legacy drills rows (merge + dedupe) into one. Coach-only (needs
+  // is_coach() to write). Safe to run every coach load — it no-ops once nothing legacy remains.
+  async function migratePositions() {
+    if (!cloud) return;
+    const MERGED = "Setter / Opposite";
+    const LEGACY = Object.keys(LEGACY_POSITION_MAP); // ["Setter", "Opposite / Right Side"]
+
+    // --- 1. players.position ---
+    // Reload raw rows so we see the stored (possibly legacy) values directly.
+    const { data: prows, error: perr } = await sb.from("players").select("id,position");
+    if (perr) throw perr;
+    const toFix = (prows || []).filter(r => LEGACY.indexOf(r.position) >= 0);
+    for (const r of toFix) {
+      const { error } = await sb.from("players").update({ position: MERGED }).eq("id", r.id);
+      if (error) throw error;
+    }
+
+    // --- 2. drills rows ---
+    const { data: drows, error: derr } = await sb.from("drills").select("position,items");
+    if (derr) throw derr;
+    const byPos = {};
+    (drows || []).forEach(r => { byPos[r.position] = r.items || []; });
+    const hasLegacyDrills = LEGACY.some(k => byPos[k] !== undefined);
+    if (hasLegacyDrills) {
+      // Merge any legacy lists + an existing merged list, dedupe preserving order.
+      const merged = [];
+      const seen = new Set();
+      const pushAll = arr => (arr || []).forEach(d => { if (!seen.has(d)) { seen.add(d); merged.push(d); } });
+      pushAll(byPos[MERGED]);          // keep anything already under the new key first
+      LEGACY.forEach(k => pushAll(byPos[k]));
+      // Write the consolidated row, then delete the legacy rows.
+      const { error: upErr } = await sb.from("drills")
+        .upsert({ position: MERGED, items: merged, updated_at: new Date().toISOString() }, { onConflict: "position" });
+      if (upErr) throw upErr;
+      for (const k of LEGACY) {
+        if (byPos[k] === undefined) continue;
+        const { error } = await sb.from("drills").delete().eq("position", k);
+        if (error) throw error;
+      }
+      drills[MERGED] = merged;          // reflect in memory
+    }
+
+    // Refresh in-memory state if we changed anything.
+    if (toFix.length || hasLegacyDrills) {
+      await reloadPlayers();
+      try { drills = await cloudLoadDrills(); } catch (e) {}
+      setStatus("merged Setter/Opposite (" + toFix.length + " players)", "ok");
+    }
   }
 
   async function onMigrate() {
@@ -629,8 +686,8 @@
       return "Defensive Specialist – Left";
     }
     if (has("libero")) return "Libero";
-    if (has("setter")) return "Setter";
-    if (has("opposite") || has("right side")) return "Opposite / Right Side";
+    if (has("setter")) return "Setter / Opposite";
+    if (has("opposite") || has("right side")) return "Setter / Opposite";
     if (has("middle") || has("blocker")) return "Middle Blocker";
     if (has("outside") || has("hitter")) return "Outside Hitter";
     return "";
@@ -787,72 +844,192 @@
   }
 
   function renderPlayerSelf() {
-    // Render the court (with names) into BOTH tab panels.
-    const pick = document.getElementById("courtWrapPick");
+    // Drills-tab court stays a plain names-court with tappable zones.
     const dr = document.getElementById("courtWrapDrills");
-    if (pick) pick.innerHTML = buildCourtWithNames();
     if (dr) dr.innerHTML = buildCourtWithNames();
     wireDrillCourt();           // make the Drills-tab court zones tappable
     document.getElementById("playerTabs").style.display = "";
 
-    const list = document.getElementById("playerSelfList");
-    const empty = document.getElementById("playerSelfEmpty");
-    list.innerHTML = "";
-    if (!players.length) { empty.style.display = "block"; empty.textContent = "No players on the roster yet."; return; }
-    empty.style.display = "none";
+    // Pick tab = drag-and-drop court + an "unassigned" tray.
+    renderPickDnD();
+  }
 
-    // sort by number then name for easy finding
-    const sorted = players.slice().sort(function (a, b) {
+  // --- Drag-and-drop pick view -------------------------------------------------
+  // Each player gets a draggable name chip. Drag a chip onto a court zone to pick
+  // (or change) that spot; drag it to the "Not placed yet" tray to clear it.
+  // Dropping saves via the same cloudUpdate() path the dropdown used.
+  function renderPickDnD() {
+    const empty = document.getElementById("playerSelfEmpty");
+    const wrap = document.getElementById("courtWrapPick");
+    const list = document.getElementById("playerSelfList");
+    if (!wrap || !list) return;
+
+    if (!players.length) {
+      wrap.innerHTML = "";
+      list.innerHTML = "";
+      if (empty) { empty.style.display = "block"; empty.textContent = "No players on the roster yet."; }
+      return;
+    }
+    if (empty) empty.style.display = "none";
+
+    // group players by canonical position
+    const byZone = {};
+    players.forEach(function (p) {
+      const z = canonPosition(p.position);
+      if (!z) return;
+      (byZone[z] = byZone[z] || []).push(p);
+    });
+    const sortByNameNum = (a, b) => {
       const na = a.num ? parseInt(a.num, 10) : Infinity, nb = b.num ? parseInt(b.num, 10) : Infinity;
       if (na !== nb) return na - nb;
       return a.name.localeCompare(b.name);
+    };
+
+    // Build the court with draggable chips inside each zone (drop targets).
+    const cells = COURT_ZONES.map(function (z) {
+      const roster = (byZone[z.pos] || []).slice().sort(sortByNameNum);
+      const chips = roster.map(chipHTML).join("");
+      return '<div class="zone dropzone' + (roster.length ? ' has' : '') + '" data-pos="' + esc(z.pos) + '">' +
+        '<span class="zn">' + z.zn + '</span>' +
+        '<span class="zl">' + z.zl + '</span>' +
+        '<span class="zc">' + z.zc + '</span>' +
+        '<div class="courtnames">' + chips + '</div></div>';
+    }).join("");
+    wrap.innerHTML =
+      '<div class="courtnet">◤ NET ◥</div>' +
+      '<div class="court court-named court-dnd">' + cells + '</div>' +
+      '<div class="courtcap muted small">Drag your name onto your spot · drag back to the tray to clear</div>';
+
+    // Unassigned tray.
+    const unplaced = players.filter(p => !canonPosition(p.position)).sort(sortByNameNum);
+    list.innerHTML =
+      '<div class="trayhead">Not placed yet <span class="muted small">(drag your name to the court)</span></div>' +
+      '<div class="tray dropzone" data-pos="">' +
+      (unplaced.length ? unplaced.map(chipHTML).join("") : '<span class="muted small traytip">Everyone has a spot 🎉</span>') +
+      '</div>';
+
+    wireDnD();
+  }
+
+  function chipHTML(p) {
+    // Player view only — no jersey number here (numbers are coach-only, shown on the
+    // coach Roster + Team Overview table). Chips show the name only.
+    return '<span class="chip" draggable="false" data-id="' + esc(p.id) + '">' + esc(p.name) + '</span>';
+  }
+
+  // Pointer-based drag (works for touch AND mouse — native HTML5 DnD does not fire
+  // on mobile touch, which is where the team actually uses this).
+  let dnd = null;
+  function wireDnD() {
+    const pick = document.getElementById("ptab-pick");
+    if (!pick) return;
+    pick.querySelectorAll(".chip").forEach(function (chip) {
+      chip.addEventListener("pointerdown", onChipDown);
     });
+  }
 
-    sorted.forEach(function (p) {
-      const card = document.createElement("div");
-      card.className = "pcard";
-      const top = document.createElement("div");
-      top.className = "ptop";
+  function dropzones() { return Array.prototype.slice.call(document.querySelectorAll("#ptab-pick .dropzone")); }
 
-      const jersey = document.createElement("span");
-      jersey.className = "jersey";
-      jersey.textContent = p.num ? "#" + p.num : "#";
+  function onChipDown(e) {
+    if (e.button != null && e.button !== 0) return; // left / primary only
+    const chip = e.currentTarget;
+    const id = chip.getAttribute("data-id");
+    e.preventDefault();
 
-      const nm = document.createElement("span");
-      nm.className = "pname";
-      nm.textContent = p.name;
+    const rect = chip.getBoundingClientRect();
+    const ghost = chip.cloneNode(true);
+    ghost.classList.add("chip-ghost");
+    ghost.style.width = rect.width + "px";
+    document.body.appendChild(ghost);
+    chip.classList.add("chip-dragging");
 
-      const sel = document.createElement("select");
-      const blank = document.createElement("option");
-      blank.value = ""; blank.textContent = "— tap to choose your spot —";
-      sel.appendChild(blank);
-      POSITIONS.forEach(function (pos) {
-        const o = document.createElement("option");
-        o.value = pos; o.textContent = posLabel(pos);
-        if (p.position === pos) o.selected = true;
-        sel.appendChild(o);
-      });
-      sel.addEventListener("change", async function () {
-        const prev = p.position;
-        p.position = sel.value;
-        try {
-          await cloudUpdate(p.id, { position: p.position });
-          flashSaved(card, "Saved ✓");
-          renderPlayerSelf();            // re-place names on the court (their name moves zones)
-          highlightCourt(p.position);    // keep their chosen zone lit
-        } catch (e) {
-          p.position = prev; sel.value = prev;
-          highlightCourt(prev);
-          flashSaved(card, "Save failed — try again", true);
-        }
-      });
-      // light the court when this player's row is focused/opened
-      sel.addEventListener("focus", function () { highlightCourt(p.position); });
+    dnd = {
+      id: id,
+      chip: chip,
+      ghost: ghost,
+      offX: e.clientX - rect.left,
+      offY: e.clientY - rect.top,
+      overZone: null,
+      moved: false,
+    };
+    moveGhost(e.clientX, e.clientY);
 
-      top.appendChild(jersey); top.appendChild(nm); top.appendChild(sel);
-      card.appendChild(top);
-      list.appendChild(card);
-    });
+    try { chip.setPointerCapture(e.pointerId); } catch (x) {}
+    chip.addEventListener("pointermove", onChipMove);
+    chip.addEventListener("pointerup", onChipUp);
+    chip.addEventListener("pointercancel", onChipUp);
+  }
+
+  function moveGhost(x, y) {
+    if (!dnd) return;
+    dnd.ghost.style.left = (x - dnd.offX) + "px";
+    dnd.ghost.style.top = (y - dnd.offY) + "px";
+  }
+
+  function zoneAtPoint(x, y) {
+    if (dnd) dnd.ghost.style.visibility = "hidden";
+    const el = document.elementFromPoint(x, y);
+    if (dnd) dnd.ghost.style.visibility = "";
+    if (!el) return null;
+    return el.closest(".dropzone");
+  }
+
+  function onChipMove(e) {
+    if (!dnd) return;
+    dnd.moved = true;
+    moveGhost(e.clientX, e.clientY);
+    const zone = zoneAtPoint(e.clientX, e.clientY);
+    if (zone !== dnd.overZone) {
+      if (dnd.overZone) dnd.overZone.classList.remove("dropover");
+      dnd.overZone = zone;
+      if (zone) zone.classList.add("dropover");
+    }
+  }
+
+  async function onChipUp(e) {
+    if (!dnd) return;
+    const d = dnd;
+    dnd = null;
+    d.chip.removeEventListener("pointermove", onChipMove);
+    d.chip.removeEventListener("pointerup", onChipUp);
+    d.chip.removeEventListener("pointercancel", onChipUp);
+    d.chip.classList.remove("chip-dragging");
+    if (d.ghost && d.ghost.parentNode) d.ghost.parentNode.removeChild(d.ghost);
+    if (d.overZone) d.overZone.classList.remove("dropover");
+
+    const zone = d.overZone;
+    if (!zone) return;                    // dropped outside any target → no-op
+    const newPos = zone.getAttribute("data-pos") || "";   // "" = unassigned tray
+    await savePlayerPosition(d.id, newPos);
+  }
+
+  // Persist a drag drop (same cloud path the dropdown used), then re-render.
+  async function savePlayerPosition(id, newPos) {
+    const p = players.find(x => x.id === id);
+    if (!p) return;
+    const prev = p.position;
+    if (canonPosition(prev) === canonPosition(newPos)) { renderPickDnD(); return; } // no real change
+    p.position = newPos;
+    try {
+      await cloudUpdate(p.id, { position: newPos });
+      renderPickDnD();
+      highlightCourt(newPos);
+      flashCourtSaved(p.name, newPos);
+    } catch (e) {
+      p.position = prev;
+      renderPickDnD();
+      const msg = document.getElementById("playerSyncMsg");
+      if (msg) { msg.textContent = "Save failed — try again."; msg.style.color = "var(--bad)"; }
+    }
+  }
+
+  function flashCourtSaved(name, pos) {
+    const msg = document.getElementById("playerSyncMsg");
+    if (!msg) return;
+    msg.textContent = pos ? (name + " → " + posLabel(canonPosition(pos)) + " · saved ✓") : (name + " cleared · saved ✓");
+    msg.style.color = "var(--good)";
+    clearTimeout(msg._t);
+    msg._t = setTimeout(function () { msg.textContent = ""; }, 2800);
   }
 
   // Make the Drills-tab court zones tappable → show that position's drills below.
@@ -873,33 +1050,26 @@
   function showDrillPanel(zonePos) {
     const panel = document.getElementById("drillPanel");
     if (!panel) return;
-    // Zone 2 box = Setter/Opposite: show both roles' drills if present.
-    const keys = zonePos === "Setter" ? ["Setter", "Opposite / Right Side"] : [zonePos];
+    const key = canonPosition(zonePos);
     let html = "";
     const common = drills[COMMON_KEY] || [];
     if (common.length) {
       html += '<div class="poslib poslib-common"><h3>' + esc(COMMON_LABEL) + "</h3>" +
         '<ul class="drill-list">' + common.map(d => "<li>" + esc(d) + "</li>").join("") + "</ul></div>";
     }
-    keys.forEach(function (k) {
-      const ds = drills[k] || [];
-      if (zonePos === "Setter" && k === "Opposite / Right Side" && ds.length === 0) return;
-      html += '<div class="poslib"><h3>' + esc(posLabel(k)) + "</h3>";
-      if (!ds.length) html += '<p class="muted small">No drills set for this position yet.</p>';
-      else html += '<ul class="drill-list">' + ds.map(d => "<li>" + esc(d) + "</li>").join("") + "</ul>";
-      html += "</div>";
-    });
+    const ds = drills[key] || [];
+    html += '<div class="poslib"><h3>' + esc(posLabel(key)) + "</h3>";
+    if (!ds.length) html += '<p class="muted small">No drills set for this position yet.</p>';
+    else html += '<ul class="drill-list">' + ds.map(d => "<li>" + esc(d) + "</li>").join("") + "</ul>";
+    html += "</div>";
     panel.innerHTML = html;
   }
-
-  // Map a position key to the court zone's data-pos (Opposite shares Setter's Zone 2 box).
-  function zonePosFor(key) { return key === "Opposite / Right Side" ? "Setter" : key; }
 
   // Court zone definitions (must match the static court markup order/labels).
   const COURT_ZONES = [
     { pos: "Outside Hitter",               zn: "4", zl: "Outside Hitter",       zc: "front-left" },
     { pos: "Middle Blocker",               zn: "3", zl: "Middle Blocker",       zc: "front-center" },
-    { pos: "Setter",                       zn: "2", zl: "Setter / Opposite",    zc: "front-right" },
+    { pos: "Setter / Opposite",            zn: "2", zl: "Setter / Opposite",    zc: "front-right" },
     { pos: "Defensive Specialist – Left",  zn: "5", zl: "Defensive Specialist", zc: "back-left" },
     { pos: "Libero",                       zn: "6", zl: "Libero",               zc: "back-center" },
     { pos: "Defensive Specialist – Right", zn: "1", zl: "Defensive Specialist", zc: "back-right" },
@@ -911,7 +1081,7 @@
     const byZone = {};
     players.forEach(function (p) {
       if (!p.position) return;
-      const z = zonePosFor(p.position);
+      const z = canonPosition(p.position);
       (byZone[z] = byZone[z] || []).push(p.name);
     });
     let cells = COURT_ZONES.map(function (z) {
@@ -939,8 +1109,7 @@
     const wrap = document.getElementById("courtWrapPick");
     const court = wrap ? wrap.querySelector(".court") : null;
     if (!court) return;
-    // Opposite shares Zone 2 with Setter (the court box is labeled "Setter / Opposite").
-    const target = positionKey === "Opposite / Right Side" ? "Setter" : positionKey;
+    const target = canonPosition(positionKey);
     court.querySelectorAll(".zone").forEach(function (z) {
       z.classList.toggle("lit", z.getAttribute("data-pos") === target && !!target);
     });
