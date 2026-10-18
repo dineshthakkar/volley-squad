@@ -8,7 +8,7 @@
 
   // Build version — bump this AND the ?v= query strings in index.html on each
   // meaningful release so browsers/PWAs fetch fresh code instead of a cached copy.
-  const BUILD = "v10";
+  const BUILD = "v11";
 
   const DRILLS_KEY = "vbcoach.drills.v1";
   const LOCAL_PLAYERS_KEY = "vbcoach.v1"; // legacy/local roster (used for migration + offline fallback)
@@ -294,40 +294,69 @@
       renderRoster();
       return;
     }
-    // Coach must enter the coach code once (stored in this browser). Nothing is baked into the public JS.
-    if (!getPass()) { showCoachPassPrompt(); return; }
+    // The coach view requires the COACH code specifically. A stored code is NOT enough —
+    // a player who entered the player code on ?player has it saved under the same key, and
+    // could otherwise reach the coach UI by changing the URL. So always VERIFY coach
+    // privilege (insert-probe, coach-only under RLS) before loading the coach view.
+    const stored = getPass();
+    if (!stored) { showCoachPassPrompt(); return; }
+    setStatus("checking access…");
+    rebuildClientWithPass(stored);
+    const ok = await verifyCoachCode(stored);
+    if (!ok) {
+      // Stored code is the player code (or wrong). Don't reveal the coach view.
+      // Offer to go to the player view, and prompt for the coach code.
+      showCoachPassPrompt(false, /*playerCodePresent*/ true);
+      return;
+    }
     await coachLoad();
   }
 
-  function showCoachPassPrompt(wrong) {
+  // Verify a passcode has COACH privilege by probing an insert (insert is coach-only under
+  // RLS), then deleting the probe row. Returns true only for the coach code.
+  async function verifyCoachCode(code) {
+    rebuildClientWithPass(code);
+    try {
+      const { data, error } = await sb.from("players")
+        .insert({ name: "__coachcheck__", sort_order: -9999 }).select().single();
+      if (error) return false;                 // player code or wrong -> insert rejected by RLS
+      await sb.from("players").delete().eq("id", data.id);
+      return true;
+    } catch (e) { return false; }
+  }
+
+  function showCoachPassPrompt(wrong, playerCodePresent) {
     coachUnlocked = false;
     setStatus("locked");
     const list = document.getElementById("playerList");
     document.getElementById("rosterEmpty").style.display = "none";
     const sr = document.getElementById("shareRow"); if (sr) sr.style.display = "none";
+    const playerUrl = location.origin + location.pathname + "?player";
     list.innerHTML =
-      '<div class="pcard" style="max-width:380px">' +
+      '<div class="pcard" style="max-width:420px">' +
       '<div class="lbl" style="margin-bottom:8px">Enter the COACH passcode</div>' +
+      (playerCodePresent
+        ? '<div class="muted small" style="margin-bottom:8px">This page is the <b>coach</b> view. You\'re signed in with the <b>player</b> code — ' +
+          '<a href="' + playerUrl + '">go to the player view</a> to pick your position. ' +
+          'If you\'re the coach, enter the coach passcode below.</div>'
+        : '') +
       (wrong ? '<div class="saveflash" style="color:var(--bad)">Incorrect coach passcode — try again.</div>' : '') +
       '<div class="row"><input id="coachPassInput" type="password" placeholder="coach passcode" ' +
       'style="flex:1;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-size:15px"> ' +
       '<button id="coachPassGo" class="primary small">Unlock</button></div>' +
+      '<div class="row" style="margin-top:8px"><a href="' + playerUrl + '" class="ghost small" style="text-decoration:none">← Go to player view</a></div>' +
       '<div class="muted small" style="margin-top:6px">Coach-only. Players use the separate self-select link.</div>' +
       '</div>';
     const go = async function () {
       const v = document.getElementById("coachPassInput").value.trim();
       if (!v) return;
-      rebuildClientWithPass(v);
-      // Verify it's the COACH code by probing an insert (coach-only) then deleting the probe.
-      try {
-        const { data, error } = await sb.from("players")
-          .insert({ name: "__coachcheck__", sort_order: -9999 }).select().single();
-        if (error) throw error;                 // player code or wrong -> insert rejected
-        await sb.from("players").delete().eq("id", data.id);
+      setStatus("checking…");
+      // Verify it's the COACH code (insert-probe, coach-only under RLS) before unlocking.
+      if (await verifyCoachCode(v)) {
         setPass(v);
         await coachLoad();
-      } catch (e) {
-        showCoachPassPrompt(true);
+      } else {
+        showCoachPassPrompt(true, playerCodePresent);
       }
     };
     document.getElementById("coachPassGo").addEventListener("click", go);
